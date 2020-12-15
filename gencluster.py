@@ -12,13 +12,16 @@ def chunks(lst, n):
 
 
 class Graph:
-    def __init__(self, k):
+    def __init__(self, k, sigma):
         self.nodes = {i: True for i in range(2*k)}
+        assert sigma > 0 and sigma <= 0.5
+        self.sigma = sigma
         self.id_bump = 2*k
         self.a = set(range(k))
         self.b = set(range(k, 2*k))
         self.cluster_nbrs = {}
         self.grid_nbrs = {}
+        self.b_cluster_nbrs = {}
 
         self.create_graph()
     
@@ -59,7 +62,7 @@ class Graph:
         self.id_bump += 1
 
 
-    def write(self, cluster_nbrs_path, grid_nbrs_path):
+    def write(self, cluster_nbrs_path, grid_nbrs_path, b_cluster_nbrs_path):
         # continous node ids starting from 0
         old2new = {}
         i = 1
@@ -67,7 +70,7 @@ class Graph:
             old2new[node] = i
             i += 1
 
-        # write graph file
+        # write cluster_nbrs file
         new_cluster_nbrs = {}
         for old_id, old_cluster in self.cluster_nbrs.items():
             new_cluster = sorted([old2new[old_nbr] for old_nbr in old_cluster])
@@ -85,7 +88,6 @@ class Graph:
                     f.write('{}\n'.format(cluster[-1]))
         print('cluster nbrs written')
         
-
         # write grid_nbrs file
         new_grid_nbrs = {}
         for old_id, old_grid in self.grid_nbrs.items():
@@ -103,6 +105,24 @@ class Graph:
                         f.write('{} '.format(i))
                     f.write('{}\n'.format(grid[-1]))
         print('grid nbrs written')
+
+        # write b_cluster_nbrs file
+        new_cluster_nbrs = {}
+        for old_id, old_cluster in self.b_cluster_nbrs.items():
+            new_cluster = sorted([old2new[old_nbr] for old_nbr in old_cluster])
+            new_cluster_nbrs[old2new[old_id]] = new_cluster
+        
+        with open(b_cluster_nbrs_path, 'w') as f:
+            for _id in sorted(new_cluster_nbrs.keys()):
+                cluster = new_cluster_nbrs[_id]
+                f.write('{}: '.format(_id))
+                if len(cluster) == 0:
+                    f.write('\n')
+                else:
+                    for i in cluster[:-1]:
+                        f.write('{} '.format(i))
+                    f.write('{}\n'.format(cluster[-1]))
+        print('b cluster nbrs written')
 
 
     def create_graph(self):
@@ -173,16 +193,47 @@ class Graph:
 
                 self.grid_nbrs[node] = set(nbrs)
 
+        print('b: cluster 1-sigma no change, sigma*1/4 cluster 2 nodes, sigma*1/8 cluster 3 nodes, sigma*1/16 cluster 4 nodes, sigma*1/16 cluster 5 nodes')
+        b_shuffle = list(self.b)
+        random.shuffle(b_shuffle)
+        b_splits = []
+        divisor = 2
+        cap = 16
+        len_sum = 0
+        b_split = b_shuffle[len_sum : len_sum + int(math.ceil(len(self.b) * (1 - self.sigma)))]
+        b_splits.append(b_split)
+        len_sum += len(b_split)
+        while len_sum < len(self.b):
+            b_split = b_shuffle[len_sum : len_sum + int(math.ceil(len(self.b) * sigma / divisor))]
+            b_splits.append(b_split)
+            len_sum += len(b_split)
+            divisor *= 2
+            if divisor > cap:
+                b_split = b_shuffle[len_sum:]
+                b_splits.append(b_split)
+                break
 
-if len(sys.argv) != 4:
-    print('usage: python gencluster.py k cluster_nbrs.clust grid_nbrs.clust')
+        cluster_size = 2
+        for b_split in b_splits[1:]:  # skip 1-sigma split
+            cluster_splits = list(chunks(b_split, cluster_size))
+            for cluster_split in cluster_splits:
+                for _id in cluster_split:
+                    nbrs = set(cluster_split)
+                    nbrs.remove(_id)
+                    self.b_cluster_nbrs[_id] = nbrs
+            cluster_size += 1
+
+if len(sys.argv) != 6:
+    print('usage: python gencluster.py k sigma cluster_nbrs.clust grid_nbrs.clust b_cluster_nbrs.clust')
     quit()
 
 k = int(sys.argv[1])
-cluster_nbrs_path = sys.argv[2]
-grid_nbrs_path = sys.argv[3]
+sigma = float(sys.argv[2])
+cluster_nbrs_path = sys.argv[3]
+grid_nbrs_path = sys.argv[4]
+b_cluster_nbrs_path = sys.argv[5]
 
 print('create graph')
-g = Graph(k)
+g = Graph(k, sigma)
 print('nodes: {}'.format(len(g.nodes)))
-g.write(cluster_nbrs_path, grid_nbrs_path)
+g.write(cluster_nbrs_path, grid_nbrs_path, b_cluster_nbrs_path)
