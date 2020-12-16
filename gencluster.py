@@ -193,7 +193,7 @@ class Graph:
 
                 self.grid_nbrs[node] = set(nbrs)
 
-        print('b: cluster 1-sigma no change, sigma*1/4 cluster 2 nodes, sigma*1/8 cluster 3 nodes, sigma*1/16 cluster 4 nodes, sigma*1/16 cluster 5 nodes')
+        print('b: cluster 1-sigma no change, sigma*1/2 cluster 2 nodes, sigma*1/4 cluster 3 nodes, sigma*1/8 cluster 4 nodes, sigma*1/8 cluster 5 nodes')
         b_shuffle = list(self.b)
         random.shuffle(b_shuffle)
         b_splits = []
