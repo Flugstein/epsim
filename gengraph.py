@@ -3,7 +3,6 @@ import numpy as np
 import random
 import math
 
-random.seed(1)
 
 def chunks(lst, n):
     '''Yield successive n-sized chunks from lst'''
@@ -11,11 +10,12 @@ def chunks(lst, n):
         yield lst[i:i + n]
 
 
-class Graph:
-    def __init__(self, k, sigma):
+class EpsimGraph:
+    def __init__(self, k, office_sigma):
+        self.k = k
         self.nodes = {i: True for i in range(2*k)}
-        assert sigma > 0 and sigma <= 0.5
-        self.sigma = sigma
+        assert office_sigma > 0 and office_sigma <= 0.5
+        self.office_sigma = office_sigma
         self.id_bump = 2*k
         self.a = set(range(k))
         self.b = set(range(k, 2*k))
@@ -126,6 +126,7 @@ class Graph:
 
 
     def create_graph(self):
+        print('creating graph with k={}, office_sigma={}'.format(self.k, self.office_sigma))
         print('randomly cluster nodes of a and b, such that there are a,b pairs')
         a2b = list(self.b)
         random.shuffle(a2b)
@@ -193,18 +194,18 @@ class Graph:
 
                 self.grid_nbrs[node] = set(nbrs)
 
-        print('b: cluster 1-sigma no change, sigma*1/2 cluster 2 nodes, sigma*1/4 cluster 3 nodes, sigma*1/8 cluster 4 nodes, sigma*1/8 cluster 5 nodes')
+        print('b: cluster 1-office_sigma no change, office_sigma*1/2 cluster 2 nodes, office_sigma*1/4 cluster 3 nodes, office_sigma*1/8 cluster 4 nodes, office_sigma*1/8 cluster 5 nodes')
         b_shuffle = list(self.b)
         random.shuffle(b_shuffle)
         b_splits = []
         divisor = 2
         cap = 16
         len_sum = 0
-        b_split = b_shuffle[len_sum : len_sum + int(math.ceil(len(self.b) * (1 - self.sigma)))]
+        b_split = b_shuffle[len_sum : len_sum + int(math.ceil(len(self.b) * (1 - self.office_sigma)))]
         b_splits.append(b_split)
         len_sum += len(b_split)
         while len_sum < len(self.b):
-            b_split = b_shuffle[len_sum : len_sum + int(math.ceil(len(self.b) * sigma / divisor))]
+            b_split = b_shuffle[len_sum : len_sum + int(math.ceil(len(self.b) * self.office_sigma / divisor))]
             b_splits.append(b_split)
             len_sum += len(b_split)
             divisor *= 2
@@ -214,7 +215,7 @@ class Graph:
                 break
 
         cluster_size = 2
-        for b_split in b_splits[1:]:  # skip 1-sigma split
+        for b_split in b_splits[1:]:  # skip 1-office_sigma split
             cluster_splits = list(chunks(b_split, cluster_size))
             for cluster_split in cluster_splits:
                 for _id in cluster_split:
@@ -223,17 +224,19 @@ class Graph:
                     self.b_cluster_nbrs[_id] = nbrs
             cluster_size += 1
 
-if len(sys.argv) != 6:
-    print('usage: python gencluster.py k sigma cluster_nbrs.clust grid_nbrs.clust b_cluster_nbrs.clust')
-    quit()
 
-k = int(sys.argv[1])
-sigma = float(sys.argv[2])
-cluster_nbrs_path = sys.argv[3]
-grid_nbrs_path = sys.argv[4]
-b_cluster_nbrs_path = sys.argv[5]
+if __name__ == '__main__':
+    if len(sys.argv) != 6:
+        print('usage: python gencluster.py k office_sigma cluster_nbrs.clust grid_nbrs.clust b_cluster_nbrs.clust')
+        quit()
 
-print('create graph')
-g = Graph(k, sigma)
-print('nodes: {}'.format(len(g.nodes)))
-g.write(cluster_nbrs_path, grid_nbrs_path, b_cluster_nbrs_path)
+    k = int(sys.argv[1])
+    office_sigma = float(sys.argv[2])
+    cluster_nbrs_path = sys.argv[3]
+    grid_nbrs_path = sys.argv[4]
+    b_cluster_nbrs_path = sys.argv[5]
+
+    print('create graph')
+    g = EpsimGraph(k, office_sigma)
+    print('nodes: {}'.format(len(g.nodes)))
+    g.write(cluster_nbrs_path, grid_nbrs_path, b_cluster_nbrs_path)
