@@ -45,29 +45,25 @@ class Epsim:
                 nbrs_dict[node] = nbrs
 
 
-    def spread_family(self, spreading_nodes, prob):
+    def spread(self, nbrs_dict, spreading_nodes, prob):
         for spreading_node in spreading_nodes:
-            for nbr in self.family_nbrs[spreading_node]:
-                if self.node_states[nbr] == 0:
-                    if random.random() < prob:
-                        self.node_states[nbr] = 1
-
-
-    def spread_school_office(self, spreading_nodes, prob):
-        infec_child_nodes = []
-        for spreading_node in spreading_nodes:
-            if spreading_node in self.school_nbrs:
-                for nbr in self.school_nbrs[spreading_node]:
+            if spreading_node in nbrs_dict:
+                for nbr in nbrs_dict[spreading_node]:
                     if self.node_states[nbr] == 0:
                         if random.random() < prob:
                             self.node_states[nbr] = 1
-                            infec_child_nodes.append(nbr)
-            if spreading_node in self.office_nbrs:
-                for nbr in self.office_nbrs[spreading_node]:
+
+    
+    def spread_ret(self, nbrs_dict, spreading_nodes, prob):
+        infec_nodes = []
+        for spreading_node in spreading_nodes:
+            if spreading_node in nbrs_dict:
+                for nbr in nbrs_dict[spreading_node]:
                     if self.node_states[nbr] == 0:
                         if random.random() < prob:
                             self.node_states[nbr] = 1
-        return infec_child_nodes
+                            infec_nodes.append(nbr)
+        return infec_nodes
 
 
     def immunize_child_family_nbrs(self, infec_child_nodes, prob):
@@ -76,41 +72,40 @@ class Epsim:
                 for nbr in self.family_nbrs[infec_child_node]:
                     self.node_states[nbr] = 5
 
-                    
+
     def run_sim(self, sim_iters, family_spread_prob, school_office_spread_prob, immunize_prob):
         num_start_nodes = int(2*math.log(len(self.node_states)))
         start_nodes = random.sample(self.node_states.keys(), num_start_nodes)
-        for v in self.node_states:
-            self.node_states[v] = 0
-        for v in start_nodes:
-            self.node_states[v] = 1
+        for node in self.node_states:
+            self.node_states[node] = 0
+        for node in start_nodes:
+            self.node_states[node] = 1
 
         print('starting simulation with n={}, num_start_nodes={}, sim_iters={}, family_spread_prob={}, school_office_spread_prob={}, immunize_prob={}'.format(len(self.node_states), len(start_nodes), sim_iters, family_spread_prob, school_office_spread_prob, immunize_prob))
         x_rounds = []
         y_num_infected = []
 
         for rnd in range(sim_iters):
-            inf_nodes = []
-            spreading_nodes = []
-            for v in self.node_states.keys():
-                if self.node_states[v] >= 1 and self.node_states[v] <= 4:
-                    inf_nodes.append(v)
-                    if self.node_states[v] >= 3 and self.node_states[v] <= 4:
-                        spreading_nodes.append(v)
+            weekday = rnd % 7
 
-            self.spread_family(spreading_nodes, family_spread_prob)
-            infec_child_nodes = self.spread_school_office(spreading_nodes, school_office_spread_prob)
-            self.immunize_child_family_nbrs(infec_child_nodes, immunize_prob)
+            inf_nodes = [node for node, state in self.node_states.items() if state in [1, 2, 3, 4]]
+            spreading_nodes = [node for node, state in self.node_states.items() if state in [3, 4]]
+
+            self.spread(self.family_nbrs, spreading_nodes, family_spread_prob)
+
+            if weekday in [0, 1, 2, 3, 4]:
+                self.spread(self.office_nbrs, spreading_nodes, school_office_spread_prob)
+                infec_child_nodes = self.spread_ret(self.school_nbrs, spreading_nodes, school_office_spread_prob)
+                self.immunize_child_family_nbrs(infec_child_nodes, immunize_prob)
+
+            num_infeced = sum([1 for node, state in self.node_states.items() if state > 0])
+            x_rounds.append(rnd)
+            y_num_infected.append(num_infeced)
 
             for inf_node in inf_nodes:
                 self.node_states[inf_node] += 1
 
-            num_infeced = sum([1 for v in self.node_states.keys() if self.node_states[v] > 0])
-            x_rounds.append(rnd)
-            y_num_infected.append(num_infeced)
-
-        print('infected nodes: {}'.format(num_infeced))
-        print()
+        print('infected nodes: {}\n'.format(num_infeced))
         return x_rounds, y_num_infected
 
 
