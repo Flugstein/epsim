@@ -17,157 +17,134 @@ class EpsimGraph:
         assert office_sigma > 0 and office_sigma <= 0.5
         self.office_sigma = office_sigma
         self.id_bump = 2*k
-        self.a = set(range(k))
-        self.b = set(range(k, 2*k))
-        self.cluster_nbrs = {}
-        self.grid_nbrs = {}
-        self.b_cluster_nbrs = {}
+        self.child_nodes = set(range(k))
+        self.parent_nodes = set(range(k, 2*k))
+        self.family_nbrs = {}
+        self.school_nbrs = {}
+        self.office_nbrs = {}
 
         self.create_graph()
     
 
-    def merge_b(self, kept_node, merge_nodes):
+    def merge_parents(self, kept_node, merge_nodes):
         for merge_node in merge_nodes:
-            for node in self.cluster_nbrs[merge_node]:
-                self.cluster_nbrs[node].add(kept_node)
-                self.cluster_nbrs[node].update(self.cluster_nbrs[kept_node])
+            for node in self.family_nbrs[merge_node]:
+                self.family_nbrs[node].add(kept_node)
+                self.family_nbrs[node].update(self.family_nbrs[kept_node])
 
-            for node in self.cluster_nbrs[merge_node]:
-                self.cluster_nbrs[node].discard(merge_node)
+            for node in self.family_nbrs[merge_node]:
+                self.family_nbrs[node].discard(merge_node)
 
-            for node in self.cluster_nbrs[kept_node]:
-                self.cluster_nbrs[node].update(self.cluster_nbrs[merge_node])
-            self.cluster_nbrs[kept_node].update(self.cluster_nbrs[merge_node])
+            for node in self.family_nbrs[kept_node]:
+                self.family_nbrs[node].update(self.family_nbrs[merge_node])
+            self.family_nbrs[kept_node].update(self.family_nbrs[merge_node])
 
-            self.cluster_nbrs.pop(merge_node)
+            self.family_nbrs.pop(merge_node)
 
             self.nodes.pop(merge_node)
-            self.b.discard(merge_node)
+            self.parent_nodes.discard(merge_node)
     
 
-    def duplicate_b(self, original):
+    def duplicate_parents(self, original_node):
         new_node = self.id_bump
-
-        self.nodes[new_node] = True
-        self.b.add(new_node)
-
-        self.cluster_nbrs[new_node] = set()
-        self.cluster_nbrs[new_node].update(self.cluster_nbrs[original])
-        self.cluster_nbrs[new_node].add(original)
-
-        for node in self.cluster_nbrs[original]:
-            self.cluster_nbrs[node].add(new_node)
-        self.cluster_nbrs[original].add(new_node)
-        
         self.id_bump += 1
 
+        self.nodes[new_node] = True
+        self.parent_nodes.add(new_node)
 
-    def write(self, cluster_nbrs_path, grid_nbrs_path, b_cluster_nbrs_path):
+        self.family_nbrs[new_node] = set()
+        self.family_nbrs[new_node].update(self.family_nbrs[original_node])
+        self.family_nbrs[new_node].add(original_node)
+
+        for node in self.family_nbrs[original_node]:
+            self.family_nbrs[node].add(new_node)
+        self.family_nbrs[original_node].add(new_node)
+    
+
+    def conv2new(self, nbrs_dict, old2new):
+        new_nbrs_dict = {}
+        for old_node, old_nbrs in nbrs_dict.items():
+            new_nbrs = sorted([old2new[old_nbr] for old_nbr in old_nbrs])
+            new_nbrs_dict[old2new[old_node]] = new_nbrs
+
+        return new_nbrs_dict
+
+
+    def write_nbrs(self, nbrs_dict, nbrs_file_path):
+        with open(nbrs_file_path, 'w') as f:
+            for node in sorted(nbrs_dict.keys()):
+                nbrs = nbrs_dict[node]
+                f.write('{}: '.format(node))
+                if len(nbrs) == 0:
+                    f.write('\n')
+                else:
+                    for nbr in nbrs[:-1]:
+                        f.write('{} '.format(nbr))
+                    f.write('{}\n'.format(nbrs[-1]))
+
+
+    def write(self, family_nbrs_path, school_nbrs_path, office_nbrs_path):
         # continous node ids starting from 0
         old2new = {}
-        i = 1
-        for node in list(self.nodes.keys()):
+        for i, node in enumerate(list(self.nodes.keys())):
             old2new[node] = i
-            i += 1
 
-        # write cluster_nbrs file
-        new_cluster_nbrs = {}
-        for old_id, old_cluster in self.cluster_nbrs.items():
-            new_cluster = sorted([old2new[old_nbr] for old_nbr in old_cluster])
-            new_cluster_nbrs[old2new[old_id]] = new_cluster
-        
-        with open(cluster_nbrs_path, 'w') as f:
-            for _id in sorted(new_cluster_nbrs.keys()):
-                cluster = new_cluster_nbrs[_id]
-                f.write('{}: '.format(_id))
-                if len(cluster) == 0:
-                    f.write('\n')
-                else:
-                    for i in cluster[:-1]:
-                        f.write('{} '.format(i))
-                    f.write('{}\n'.format(cluster[-1]))
-        print('cluster nbrs written')
-        
-        # write grid_nbrs file
-        new_grid_nbrs = {}
-        for old_id, old_grid in self.grid_nbrs.items():
-            new_grid = sorted([old2new[old_nbr] for old_nbr in old_grid])
-            new_grid_nbrs[old2new[old_id]] = new_grid
-        
-        with open(grid_nbrs_path, 'w') as f:
-            for _id in sorted(new_grid_nbrs.keys()):
-                grid = new_grid_nbrs[_id]
-                f.write('{}: '.format(_id))
-                if len(grid) == 0:
-                    f.write('\n')
-                else:
-                    for i in grid[:-1]:
-                        f.write('{} '.format(i))
-                    f.write('{}\n'.format(grid[-1]))
-        print('grid nbrs written')
+        new_family_nbrs = self.conv2new(self.family_nbrs, old2new)
+        self.write_nbrs(new_family_nbrs, family_nbrs_path)
+        print('family_nbrs written')
 
-        # write b_cluster_nbrs file
-        new_cluster_nbrs = {}
-        for old_id, old_cluster in self.b_cluster_nbrs.items():
-            new_cluster = sorted([old2new[old_nbr] for old_nbr in old_cluster])
-            new_cluster_nbrs[old2new[old_id]] = new_cluster
-        
-        with open(b_cluster_nbrs_path, 'w') as f:
-            for _id in sorted(new_cluster_nbrs.keys()):
-                cluster = new_cluster_nbrs[_id]
-                f.write('{}: '.format(_id))
-                if len(cluster) == 0:
-                    f.write('\n')
-                else:
-                    for i in cluster[:-1]:
-                        f.write('{} '.format(i))
-                    f.write('{}\n'.format(cluster[-1]))
-        print('b cluster nbrs written')
+        new_school_nbrs = self.conv2new(self.school_nbrs, old2new)
+        self.write_nbrs(new_school_nbrs, school_nbrs_path)
+        print('school_nbrs nbrs written')
+
+        new_office_nbrs = self.conv2new(self.office_nbrs, old2new)
+        self.write_nbrs(new_office_nbrs, office_nbrs_path)
+        print('office_nbrs nbrs written')
 
 
     def create_graph(self):
         print('creating graph with k={}, office_sigma={}'.format(self.k, self.office_sigma))
-        print('randomly cluster nodes of a and b, such that there are a,b pairs')
-        a2b = list(self.b)
-        random.shuffle(a2b)
-        for a_node, b_node in enumerate(a2b):
-            self.cluster_nbrs[a_node] = {b_node}
-            self.cluster_nbrs[b_node] = {a_node}
+        print('randomly cluster children and parent nodes, such that there are child-parent pairs')
+        children2parents = list(self.parent_nodes)
+        random.shuffle(children2parents)
+        for child_node, parent_node in enumerate(children2parents):
+            self.family_nbrs[child_node] = {parent_node}
+            self.family_nbrs[parent_node] = {child_node}
 
-        print('b: 1/2 no change, 1/4 merge 2 nodes, 1/8 merge 3 nodes, ...')
-        b_shuffle = list(self.b)
-        random.shuffle(b_shuffle)
-        b_splits = []
+        print('parents: 1/2 no change, 1/4 merge 2 nodes, 1/8 merge 3 nodes, ...')
+        parents_shuffle = list(self.parent_nodes)
+        random.shuffle(parents_shuffle)
+        parents_splits = []
         divisor = 2
         len_sum = 0
-        while len_sum < len(self.b):
-            b_split = b_shuffle[len_sum : len_sum + int(math.ceil(len(self.b) / divisor))]
-            b_splits.append(b_split)
-            len_sum += len(b_split)
+        while len_sum < len(self.parent_nodes):
+            parents_split = parents_shuffle[len_sum : len_sum + int(math.ceil(len(self.parent_nodes) / divisor))]
+            parents_splits.append(parents_split)
+            len_sum += len(parents_split)
             divisor *= 2
 
         merge_size = 2
-        for b_split in b_splits[1:]:  # skip 1/2 split
-            merge_splits = list(chunks(b_split, merge_size))
+        for parents_split in parents_splits[1:]:  # skip 1/2 split
+            merge_splits = list(chunks(parents_split, merge_size))
             for merge_split in merge_splits:
-                self.merge_b(merge_split[0], merge_split[1:])
+                self.merge_parents(merge_split[0], merge_split[1:])
             merge_size += 1
 
-        print('b: duplicate every node')
-        b_nodes = self.b.copy()
-        for b_node in b_nodes:
-            self.duplicate_b(b_node)
+        print('parents: duplicate every node')
+        parent_nodes = self.parent_nodes.copy()
+        for parent_node in parent_nodes:
+            self.duplicate_parents(parent_node)
 
         l = 5
-        print('a: k/l^2 many l*l grids, place l^2 nodes randomly on grid, cluster 8 neighbourhood, with l={}'.format(l))
-        a_shuffle = list(self.a)
-        random.shuffle(a_shuffle)
-        a_splits = list(chunks(a_shuffle, l*l))
-        if len(a_splits[-1]) != l*l:  # skip remainder
-            a_splits = a_splits[:-1]
+        print('children: k/l^2 many l*l grids, place l^2 nodes randomly on grid, cluster 8 neighbourhood, with l={}'.format(l))
+        children_shuffle = list(self.child_nodes)
+        random.shuffle(children_shuffle)
+        children_splits = list(chunks(children_shuffle, l*l))
+        if len(children_splits[-1]) != l*l:  # skip remainder
+            children_splits = children_splits[:-1]
         
-        for a_split in a_splits:
-            grid = np.reshape(a_split, (l, l))
+        for children_split in children_splits:
+            grid = np.reshape(children_split, (l, l))
 
             for i, j in np.ndindex(grid.shape):
                 node = grid[i][j]
@@ -192,51 +169,51 @@ class EpsimGraph:
                     if j < l - 1:
                         nbrs.append(grid[i+1][j+1])
 
-                self.grid_nbrs[node] = set(nbrs)
+                self.school_nbrs[node] = set(nbrs)
 
-        print('b: cluster 1-office_sigma no change, office_sigma*1/2 cluster 2 nodes, office_sigma*1/4 cluster 3 nodes, office_sigma*1/8 cluster 4 nodes, office_sigma*1/8 cluster 5 nodes')
-        b_shuffle = list(self.b)
-        random.shuffle(b_shuffle)
-        b_splits = []
+        print('parents: cluster 1-office_sigma no change, office_sigma*1/2 cluster 2 nodes, office_sigma*1/4 cluster 3 nodes, office_sigma*1/8 cluster 4 nodes, office_sigma*1/8 cluster 5 nodes')
+        parents_shuffle = list(self.parent_nodes)
+        random.shuffle(parents_shuffle)
+        parents_splits = []
         divisor = 2
         cap = 16
         len_sum = 0
-        b_split = b_shuffle[len_sum : len_sum + int(math.ceil(len(self.b) * (1 - self.office_sigma)))]
-        b_splits.append(b_split)
-        len_sum += len(b_split)
-        while len_sum < len(self.b):
-            b_split = b_shuffle[len_sum : len_sum + int(math.ceil(len(self.b) * self.office_sigma / divisor))]
-            b_splits.append(b_split)
-            len_sum += len(b_split)
+        parents_split = parents_shuffle[len_sum : len_sum + int(math.ceil(len(self.parent_nodes) * (1 - self.office_sigma)))]
+        parents_splits.append(parents_split)
+        len_sum += len(parents_split)
+        while len_sum < len(self.parent_nodes):
+            parents_split = parents_shuffle[len_sum : len_sum + int(math.ceil(len(self.parent_nodes) * self.office_sigma / divisor))]
+            parents_splits.append(parents_split)
+            len_sum += len(parents_split)
             divisor *= 2
             if divisor > cap:
-                b_split = b_shuffle[len_sum:]
-                b_splits.append(b_split)
+                parents_split = parents_shuffle[len_sum:]
+                parents_splits.append(parents_split)
                 break
 
         cluster_size = 2
-        for b_split in b_splits[1:]:  # skip 1-office_sigma split
-            cluster_splits = list(chunks(b_split, cluster_size))
+        for parents_split in parents_splits[1:]:  # skip 1-office_sigma split
+            cluster_splits = list(chunks(parents_split, cluster_size))
             for cluster_split in cluster_splits:
-                for _id in cluster_split:
+                for node in cluster_split:
                     nbrs = set(cluster_split)
-                    nbrs.remove(_id)
-                    self.b_cluster_nbrs[_id] = nbrs
+                    nbrs.remove(node)
+                    self.office_nbrs[node] = nbrs
             cluster_size += 1
 
 
 if __name__ == '__main__':
     if len(sys.argv) != 6:
-        print('usage: python gencluster.py k office_sigma cluster_nbrs.clust grid_nbrs.clust b_cluster_nbrs.clust')
+        print('usage: python gengraph.py k office_sigma family.nbrs school.nbrs office.nbrs')
         quit()
 
     k = int(sys.argv[1])
     office_sigma = float(sys.argv[2])
-    cluster_nbrs_path = sys.argv[3]
-    grid_nbrs_path = sys.argv[4]
-    b_cluster_nbrs_path = sys.argv[5]
+    family_nbrs_path = sys.argv[3]
+    school_nbrs_path = sys.argv[4]
+    office_nbrs_path = sys.argv[5]
 
     print('create graph')
     g = EpsimGraph(k, office_sigma)
     print('nodes: {}'.format(len(g.nodes)))
-    g.write(cluster_nbrs_path, grid_nbrs_path, b_cluster_nbrs_path)
+    g.write(family_nbrs_path, school_nbrs_path, office_nbrs_path)
