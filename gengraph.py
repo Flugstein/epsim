@@ -11,8 +11,9 @@ def chunks(lst, n):
 
 
 class EpsimGraph:
-    def __init__(self, k, office_sigma):
+    def __init__(self, k, office_sigma, split_classes):
         self.k = k
+        self.split_classes = split_classes
         self.nodes = {i: True for i in range(2*k)}
         assert office_sigma > 0 and office_sigma <= 0.5
         self.office_sigma = office_sigma
@@ -20,7 +21,7 @@ class EpsimGraph:
         self.child_nodes = set(range(k))
         self.parent_nodes = set(range(k, 2*k))
         self.family_nbrs = {}
-        self.school_nbrs = {}
+        self.school_nbrs = [] # list of dicts
         self.office_nbrs = {}
 
         self.create_graph()
@@ -93,9 +94,10 @@ class EpsimGraph:
         self.write_nbrs(new_family_nbrs, family_nbrs_path)
         print('family_nbrs written')
 
-        new_school_nbrs = self.conv2new(self.school_nbrs, old2new)
-        self.write_nbrs(new_school_nbrs, school_nbrs_path)
-        print('school_nbrs nbrs written')
+        for i in range(len(self.school_nbrs)):
+            new_school_nbrs = self.conv2new(self.school_nbrs[i], old2new)
+            self.write_nbrs(new_school_nbrs, school_nbrs_path + f'_{i}')
+            print(f'school_nbrs_{i} nbrs written')
 
         new_office_nbrs = self.conv2new(self.office_nbrs, old2new)
         self.write_nbrs(new_office_nbrs, office_nbrs_path)
@@ -142,34 +144,49 @@ class EpsimGraph:
         children_splits = list(chunks(children_shuffle, l*l))
         if len(children_splits[-1]) != l*l:  # skip remainder
             children_splits = children_splits[:-1]
-        
-        for children_split in children_splits:
-            grid = np.reshape(children_split, (l, l))
 
-            for i, j in np.ndindex(grid.shape):
-                node = grid[i][j]
-                nbrs = []
+        def make_grid(skip):
+            adjlist = {}
 
-                if i > 0:
-                    nbrs.append(grid[i-1][j])
+            for children_split in children_splits:
+                grid = np.reshape(children_split, (l, l))
+
+                for i, j in np.ndindex(grid.shape):
+                    node = grid[i][j]
+                    nbrs = []
+
+                    # skip nodes where (i+j) % 2 == skip 
+                    # running with skip={1,2} gives split classes, while skip>=2 has no effect
+                    if (i + j) % 2 == skip:
+                        continue
+
+                    def addUnlessSkip(i,j):
+                        if (i + j) % 2 != skip:
+                            nbrs.append(grid[i][j])
+
+                    if i > 0:
+                        addUnlessSkip(i-1,j)
+                        if j > 0:
+                            addUnlessSkip(i-1,j-1)
+                        if j < l - 1:
+                            addUnlessSkip(i-1,j+1)
+                        
                     if j > 0:
-                        nbrs.append(grid[i-1][j-1])
+                        addUnlessSkip(i,j-1)
                     if j < l - 1:
-                        nbrs.append(grid[i-1][j+1])
-                    
-                if j > 0:
-                    nbrs.append(grid[i][j-1])
-                if j < l - 1:
-                    nbrs.append(grid[i][j+1])
+                        addUnlessSkip(i,j+1)
 
-                if i < l - 1:
-                    nbrs.append(grid[i+1][j])
-                    if j > 0:
-                        nbrs.append(grid[i+1][j-1])
-                    if j < l - 1:
-                        nbrs.append(grid[i+1][j+1])
+                    if i < l - 1:
+                        addUnlessSkip(i+1,j)
+                        if j > 0:
+                            addUnlessSkip(i+1,j-1)
+                        if j < l - 1:
+                            addUnlessSkip(i+1,j+1)
 
-                self.school_nbrs[node] = set(nbrs)
+                    adjlist[node] = set(nbrs)
+            return adjlist
+
+        self.school_nbrs = [make_grid(x) for x in ( {0,1} if split_classes else {2} )]
 
         print('parents: cluster 1-office_sigma no change, office_sigma*1/2 cluster 2 nodes, office_sigma*1/4 cluster 3 nodes, office_sigma*1/8 cluster 4 nodes, office_sigma*1/8 cluster 5 nodes')
         parents_shuffle = list(self.parent_nodes)
@@ -203,17 +220,22 @@ class EpsimGraph:
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 6:
-        print('usage: python gengraph.py k office_sigma family.nbrs school.nbrs office.nbrs')
+    if len(sys.argv) != 7:
+        print('usage: python gengraph.py k office_sigma split_classes family.nbrs school.nbrs office.nbrs')
+        print('\tsplit_classes: split each class into two alternating classes ("true" or "false")')
         quit()
+
+    random.seed(0) # debugging, TODO remove
 
     k = int(sys.argv[1])
     office_sigma = float(sys.argv[2])
-    family_nbrs_path = sys.argv[3]
-    school_nbrs_path = sys.argv[4]
-    office_nbrs_path = sys.argv[5]
+    split_classes = sys.argv[3] == 'true'
+    family_nbrs_path = sys.argv[4]
+    school_nbrs_path = sys.argv[5]
+    office_nbrs_path = sys.argv[6]
 
     print('create graph')
-    g = EpsimGraph(k, office_sigma)
+    g = EpsimGraph(k, office_sigma, split_classes)
     print('nodes: {}'.format(len(g.nodes)))
     g.write(family_nbrs_path, school_nbrs_path, office_nbrs_path)
+

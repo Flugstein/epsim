@@ -16,7 +16,7 @@ class Epsim:
     def __init__(self):
         self.node_states = {}
         self.family_nbrs = {}
-        self.school_nbrs = {}
+        self.school_nbrs = []
         self.office_nbrs = {}
 
 
@@ -27,12 +27,17 @@ class Epsim:
         self.node_states = {node: 0 for (node, nbrs) in family_nbrs.items()}
 
 
-    def init_from_files(self, family_nbrs_path, school_nbrs_path, office_nbrs_path):
+    def init_from_files(self, family_nbrs_path, school_nbrs_path, office_nbrs_path, split_classes):
         print('read nbrs files')
         self.read_nbrs_file(self.family_nbrs, family_nbrs_path)
-        self.read_nbrs_file(self.school_nbrs, school_nbrs_path)
         self.read_nbrs_file(self.office_nbrs, office_nbrs_path)
         self.node_states = {node: 0 for (node, nbrs) in self.family_nbrs.items()}
+
+        files = "_0 _1".split() if split_classes else {"_0"}
+        for f in files: 
+            cur = {}
+            self.read_nbrs_file(cur, school_nbrs_path + f)
+            self.school_nbrs.append(cur)
 
 
     def read_nbrs_file(self, nbrs_dict, nbrs_file_path):
@@ -73,9 +78,10 @@ class Epsim:
 
     def immunize_children_after_testing(self, spreading_nodes, prob):
         for spreading_node in spreading_nodes:
-            if spreading_node in self.school_nbrs:
-                if random.random() < prob:
-                    self.node_states[spreading_node] = 5
+            for school_class in self.school_nbrs:
+                if spreading_node in school_class:
+                    if random.random() < prob:
+                        self.node_states[spreading_node] = 5
 
     #similar to immunize_child_family_nbrs
     def quarantine_family(self, prob):
@@ -116,7 +122,8 @@ class Epsim:
 
             if weekday in [0, 1, 2, 3, 4]:
                 self.spread(self.office_nbrs, spreading_nodes, school_office_spread_prob)
-                infec_child_nodes = self.spread_ret(self.school_nbrs, spreading_nodes, school_office_spread_prob)
+                current_class = rnd % len(self.school_nbrs)
+                infec_child_nodes = self.spread_ret(self.school_nbrs[current_class], spreading_nodes, school_office_spread_prob)
                 self.immunize_child_family_nbrs(infec_child_nodes, immunize_prob)
 
             self.quarantine_family(quarantine_prob)
@@ -133,9 +140,9 @@ class Epsim:
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 11:
+    if len(sys.argv) != 12:
         print('usage: python epsim.py sim_iters family_spread_prob school_office_spread_prob immunize_prob \
-                testing_prob quarantine_prob family.nbrs school.nbrs office.nbrs out.csv')
+                testing_prob quarantine_prob split_classes family.nbrs school.nbrs office.nbrs out.csv')
         quit()
 
     sim_iters = int(sys.argv[1])
@@ -144,13 +151,14 @@ if __name__ == '__main__':
     immunize_prob = float(sys.argv[4])
     testing_prob = float(sys.argv[5])
     quarantine_prob = float(sys.argv[6])
-    family_nbrs_path = sys.argv[7]
-    school_nbrs_path = sys.argv[8]
-    office_nbrs_path = sys.argv[9]
-    out_path = sys.argv[10]
+    split_classes = sys.argv[7] == 'true'
+    family_nbrs_path = sys.argv[8]
+    school_nbrs_path = sys.argv[9]
+    office_nbrs_path = sys.argv[10]
+    out_path = sys.argv[11]
 
     epsim = Epsim()
-    epsim.init_from_files(family_nbrs_path, school_nbrs_path, office_nbrs_path)
+    epsim.init_from_files(family_nbrs_path, school_nbrs_path, office_nbrs_path, split_classes)
     x_rounds, y_num_infected = epsim.run_sim(sim_iters, family_spread_prob, school_office_spread_prob, \
                                 immunize_prob, testing_prob, quarantine_prob)
 
