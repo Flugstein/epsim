@@ -225,8 +225,6 @@ if __name__ == '__main__':
         print('\tsplit_classes: split each class into two alternating classes ("true" or "false")')
         quit()
 
-    random.seed(0) # debugging, TODO remove
-
     k = int(sys.argv[1])
     office_sigma = float(sys.argv[2])
     split_classes = sys.argv[3] == 'true'
