@@ -11,6 +11,7 @@ import time
 # 3 infected: spreading
 # 4 infected: spreading
 # 5 immune
+num_node_states = 6
 
 class Epsim:
     def __init__(self):
@@ -49,6 +50,16 @@ class Epsim:
                 nbrs_dict[node] = nbrs
 
 
+    def immunize_node(self, node):
+        self.node_states[node] = 5
+        if node in self.inf_nodes:
+            self.inf_nodes.remove(node)
+        if node in self.spreading_child_nodes:
+            self.spreading_child_nodes.remove(node)
+        if node in self.spreading_parent_nodes:
+            self.spreading_parent_nodes.remove(node)
+
+
     def spread(self, nbrs_dict, spreading_nodes, prob):
         for spreading_node in spreading_nodes:
             if spreading_node in nbrs_dict:
@@ -74,26 +85,27 @@ class Epsim:
         for infec_child_node in infec_child_nodes:
             if random.random() < prob:
                 for nbr in self.family_nbrs[infec_child_node]:
-                    self.node_states[nbr] = 5
+                    self.immunize_node(nbr)
 
-    def immunize_children_after_testing(self, spreading_nodes, prob):
-        for spreading_node in spreading_nodes:
-            for school_class in self.school_nbrs:
-                if spreading_node in school_class:
-                    if random.random() < prob:
-                        self.node_states[spreading_node] = 5
 
-    #similar to immunize_child_family_nbrs
-    def quarantine_family(self, prob):
-        immune_nodes = [node for node, state in self.node_states.items() if state >= 5]
-        for node in immune_nodes:
+    def immunize_children_after_testing(self, spreading_child_nodes, prob):
+        positive_tested_child_nodes = []
+        for spreading_child_node in spreading_child_nodes:
             if random.random() < prob:
-                for nbr in self.family_nbrs[node]:
-                    self.node_states[nbr] = 5
+                self.immunize_node(spreading_child_node)
+                positive_tested_child_nodes.append(spreading_child_node)
+        return positive_tested_child_nodes
 
 
+    # similar to immunize_child_family_nbrs
+    def quarantine_family(self, positive_tested_child_nodes, prob):
+        for child_node in positive_tested_child_nodes:
+            if random.random() < prob:
+                for nbr in self.family_nbrs[child_node]:
+                    self.immunize_node(nbr)
 
-    def run_sim(self, sim_iters, family_spread_prob, school_office_spread_prob, immunize_prob, testing_prob, quarantine_prob):
+
+    def run_sim(self, sim_iters, family_spread_prob, school_office_spread_prob, immunize_prob, testing_prob, quarantine_prob, print_progress=False):
         num_start_nodes = int(2*math.log(len(self.node_states)))
         start_nodes = random.sample(self.node_states.keys(), num_start_nodes)
         for node in self.node_states:
@@ -107,32 +119,44 @@ class Epsim:
             format(family_spread_prob, school_office_spread_prob, immunize_prob, testing_prob, quarantine_prob))
         x_rounds = []
         y_num_infected = []
+        states_per_rnd = []
 
         for rnd in range(sim_iters):
             weekday = rnd % 7
+            self.inf_nodes = [node for node, state in self.node_states.items() if state in [1, 2, 3, 4]]
+            self.spreading_parent_nodes = [node for node, state in self.node_states.items() if state in [3, 4] and node in self.office_nbrs]
+            self.spreading_child_nodes = [node for node, state in self.node_states.items() if state in [3, 4] and node not in self.office_nbrs]
 
-            inf_nodes = [node for node, state in self.node_states.items() if state in [1, 2, 3, 4]]
-            spreading_nodes = [node for node, state in self.node_states.items() if state in [3, 4]]
+            # spread in family every day
+            self.spread(self.family_nbrs, self.spreading_parent_nodes + self.spreading_child_nodes, family_spread_prob)
 
-            self.spread(self.family_nbrs, spreading_nodes, family_spread_prob)
-
-            #assume children are tested on Monday morning
+            # children are tested on monday morning and if they test positive, their family gets quarantined
             if weekday == 0:
-                self.immunize_children_after_testing(spreading_nodes, testing_prob)
+                positive_tested_child_nodes = self.immunize_children_after_testing(self.spreading_child_nodes, testing_prob)
+                self.quarantine_family(positive_tested_child_nodes, quarantine_prob)
 
+            # spread in office and school only during weekdays
             if weekday in [0, 1, 2, 3, 4]:
-                self.spread(self.office_nbrs, spreading_nodes, school_office_spread_prob)
+                # spread in office
+                self.spread(self.office_nbrs, self.spreading_parent_nodes, school_office_spread_prob)
+                # school classes are split and rotate every day
                 current_class = rnd % len(self.school_nbrs)
-                infec_child_nodes = self.spread_ret(self.school_nbrs[current_class], spreading_nodes, school_office_spread_prob)
+                infec_child_nodes = self.spread_ret(self.school_nbrs[current_class], self.spreading_child_nodes, school_office_spread_prob)
+                # with immunize_prob the family of a just infected child becomes immune
                 self.immunize_child_family_nbrs(infec_child_nodes, immunize_prob)
 
-            self.quarantine_family(quarantine_prob)
+            states_per_rnd.append([0] * num_node_states)
+            for state in self.node_states.values():
+                states_per_rnd[rnd][state] += 1
+            if print_progress:
+                print(str(rnd) + ': ' + str(states_per_rnd[rnd]))
 
-            num_infeced = sum([1 for node, state in self.node_states.items() if state > 0])
+            num_infeced = sum(states_per_rnd[rnd][1:])
             x_rounds.append(rnd)
             y_num_infected.append(num_infeced)
 
-            for inf_node in inf_nodes:
+            # all infected nodes increase their state every round
+            for inf_node in self.inf_nodes:
                 self.node_states[inf_node] += 1
 
         print('infected nodes: {}\n'.format(num_infeced))

@@ -186,7 +186,7 @@ class EpsimGraph:
                     adjlist[node] = set(nbrs)
             return adjlist
 
-        self.school_nbrs = [make_grid(x) for x in ( {0,1} if split_classes else {2} )]
+        self.school_nbrs = [make_grid(x) for x in ( {0,1} if self.split_classes else {2} )]
 
         print('parents: cluster 1-office_sigma no change, office_sigma*1/2 cluster 2 nodes, office_sigma*1/4 cluster 3 nodes, office_sigma*1/8 cluster 4 nodes, office_sigma*1/8 cluster 5 nodes')
         parents_shuffle = list(self.parent_nodes)
