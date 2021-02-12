@@ -50,6 +50,13 @@ class Epsim:
                 nbrs_dict[node] = nbrs
 
 
+    def write_csv(self, file_path, states_per_rnd):
+        with open(file_path, 'w') as f:
+            f.write('round,state_1,state_2,state_3,state_4,state_5\n')
+            for rnd,states in enumerate(states_per_rnd):
+                f.write('{},{},{},{},{},{},{}\n'.format(rnd, states[0], states[1], states[2], states[3], states[4], states[5]))
+
+
     def immunize_node(self, node):
         self.node_states[node] = 5
         if node in self.inf_nodes:
@@ -105,7 +112,7 @@ class Epsim:
                     self.immunize_node(nbr)
 
 
-    def run_sim(self, sim_iters, family_spread_prob, school_office_spread_prob, immunize_prob, testing_prob, quarantine_prob, print_progress=False):
+    def run_sim(self, sim_iters, family_spread_prob, school_office_spread_prob, immunize_prob, testing_prob, quarantine_prob, print_progress=False, export_csv=False):
         num_start_nodes = int(2*math.log(len(self.node_states)))
         start_nodes = random.sample(self.node_states.keys(), num_start_nodes)
         for node in self.node_states:
@@ -150,6 +157,8 @@ class Epsim:
                 states_per_rnd[rnd][state] += 1
             if print_progress:
                 print(str(rnd) + ': ' + str(states_per_rnd[rnd]))
+            if export_csv:
+                self.write_csv(export_csv, states_per_rnd)
 
             num_infeced = sum(states_per_rnd[rnd][1:])
             x_rounds.append(rnd)
