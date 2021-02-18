@@ -88,10 +88,10 @@ class Epsim:
         return infec_nodes
 
 
-    def immunize_child_family_nbrs(self, infec_child_nodes, prob):
-        for infec_child_node in infec_child_nodes:
+    def immunize_child_family_nbrs(self, child_nodes, prob):
+        for child_node in child_nodes:
             if random.random() < prob:
-                for nbr in self.family_nbrs[infec_child_node]:
+                for nbr in self.family_nbrs[child_node]:
                     self.immunize_node(nbr)
 
 
@@ -104,15 +104,7 @@ class Epsim:
         return positive_tested_child_nodes
 
 
-    # similar to immunize_child_family_nbrs
-    def quarantine_family(self, positive_tested_child_nodes, prob):
-        for child_node in positive_tested_child_nodes:
-            if random.random() < prob:
-                for nbr in self.family_nbrs[child_node]:
-                    self.immunize_node(nbr)
-
-
-    def run_sim(self, sim_iters, family_spread_prob, school_office_spread_prob, immunize_prob, testing_prob, quarantine_prob, print_progress=False, export_csv=False):
+    def run_sim(self, sim_iters, family_spread_prob, school_office_spread_prob, immunize_prob, testing_prob, print_progress=False, export_csv=False):
         num_start_nodes = int(2*math.log(len(self.node_states)))
         start_nodes = random.sample(self.node_states.keys(), num_start_nodes)
         for node in self.node_states:
@@ -122,8 +114,8 @@ class Epsim:
 
         print('starting simulation with n={}, num_start_nodes={}, sim_iters={}'.\
             format(len(self.node_states), len(start_nodes), sim_iters))
-        print('family_spread_prob={}, school_office_spread_prob={}, immunize_prob={}, testing_prob={}, quarantine_prob={}'.\
-            format(family_spread_prob, school_office_spread_prob, immunize_prob, testing_prob, quarantine_prob))
+        print('family_spread_prob={}, school_office_spread_prob={}, immunize_prob={}, testing_prob={}'.\
+            format(family_spread_prob, school_office_spread_prob, immunize_prob, testing_prob))
         x_rounds = []
         y_num_infected = []
         states_per_rnd = []
@@ -140,7 +132,7 @@ class Epsim:
             # children are tested on monday morning and if they test positive, their family gets quarantined
             if weekday == 0:
                 positive_tested_child_nodes = self.immunize_children_after_testing(self.spreading_child_nodes, testing_prob)
-                self.quarantine_family(positive_tested_child_nodes, quarantine_prob)
+                self.immunize_child_family_nbrs(positive_tested_child_nodes, prob=1.0)
 
             # spread in office and school only during weekdays
             if weekday in [0, 1, 2, 3, 4]:
@@ -175,7 +167,7 @@ class Epsim:
 if __name__ == '__main__':
     if len(sys.argv) != 12:
         print('usage: python epsim.py sim_iters family_spread_prob school_office_spread_prob immunize_prob \
-                testing_prob quarantine_prob split_classes family.nbrs school.nbrs office.nbrs out.csv')
+                testing_prob split_classes family.nbrs school.nbrs office.nbrs out.csv')
         quit()
 
     sim_iters = int(sys.argv[1])
@@ -183,17 +175,16 @@ if __name__ == '__main__':
     school_office_spread_prob = float(sys.argv[3])
     immunize_prob = float(sys.argv[4])
     testing_prob = float(sys.argv[5])
-    quarantine_prob = float(sys.argv[6])
-    split_classes = sys.argv[7] == 'true'
-    family_nbrs_path = sys.argv[8]
-    school_nbrs_path = sys.argv[9]
-    office_nbrs_path = sys.argv[10]
-    out_path = sys.argv[11]
+    split_classes = sys.argv[6] == 'true'
+    family_nbrs_path = sys.argv[7]
+    school_nbrs_path = sys.argv[8]
+    office_nbrs_path = sys.argv[9]
+    out_path = sys.argv[10]
 
     epsim = Epsim()
     epsim.init_from_files(family_nbrs_path, school_nbrs_path, office_nbrs_path, split_classes)
     x_rounds, y_num_infected = epsim.run_sim(sim_iters, family_spread_prob, school_office_spread_prob, \
-                                immunize_prob, testing_prob, quarantine_prob)
+                                immunize_prob, testing_prob)
 
     with open(out_path, 'w') as f:
         for i in range(len(x_rounds)):
