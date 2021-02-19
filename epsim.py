@@ -17,28 +17,33 @@ class Epsim:
     def __init__(self):
         self.node_states = {}
         self.family_nbrs = {}
-        self.school_nbrs = []
+        self.school_nbrs_standard = {}
+        self.school_nbrs_split = [{}, {}]
         self.office_nbrs = {}
 
 
-    def init_from_dicts(self, family_nbrs, school_nbrs, office_nbrs):
+    def init_from_dicts(self, family_nbrs, school_nbrs_standard, school_nbrs_split, office_nbrs):
         self.family_nbrs = family_nbrs
-        self.school_nbrs = school_nbrs
+        self.school_nbrs_standard = school_nbrs_standard
+        self.school_nbrs_split = school_nbrs_split
         self.office_nbrs = office_nbrs
         self.node_states = {node: 0 for (node, nbrs) in family_nbrs.items()}
 
 
-    def init_from_files(self, family_nbrs_path, school_nbrs_path, office_nbrs_path, split_classes):
+    def init_from_files(self, family_nbrs_path, school_standard_path, school_split_0_path, school_split_1_path, office_nbrs_path):
         print('read nbrs files')
         self.read_nbrs_file(self.family_nbrs, family_nbrs_path)
         self.read_nbrs_file(self.office_nbrs, office_nbrs_path)
         self.node_states = {node: 0 for (node, nbrs) in self.family_nbrs.items()}
 
-        files = "_0 _1".split() if split_classes else {"_0"}
-        for f in files: 
-            cur = {}
-            self.read_nbrs_file(cur, school_nbrs_path + f)
-            self.school_nbrs.append(cur)
+        if school_standard_path:
+            self.read_nbrs_file(self.school_nbrs_standard, school_standard_path)
+        if school_split_0_path:
+            self.school_nbrs_split = []
+            for p in (school_split_0_path, school_split_1_path):
+                cur = {}
+                self.read_nbrs_file(cur, p)
+                self.school_nbrs_split.append(cur)
 
 
     def read_nbrs_file(self, nbrs_dict, nbrs_file_path):
@@ -116,6 +121,7 @@ class Epsim:
             format(len(self.node_states), len(start_nodes), sim_iters))
         print('family_spread_prob={}, school_office_spread_prob={}, immunize_prob={}, testing_prob={}'.\
             format(family_spread_prob, school_office_spread_prob, immunize_prob, testing_prob))
+        print(f"{len(self.school_nbrs_split[0]) + len(self.school_nbrs_split[1])} children in split classes and {len(self.school_nbrs_standard)} children in standard classes")
         x_rounds = []
         y_num_infected = []
         states_per_rnd = []
@@ -138,11 +144,18 @@ class Epsim:
             if weekday in [0, 1, 2, 3, 4]:
                 # spread in office
                 self.spread(self.office_nbrs, self.spreading_parent_nodes, school_office_spread_prob)
-                # school classes are split and rotate every day
-                current_class = rnd % len(self.school_nbrs)
-                infec_child_nodes = self.spread_ret(self.school_nbrs[current_class], self.spreading_child_nodes, school_office_spread_prob)
-                # with immunize_prob the family of a just infected child becomes immune
-                self.immunize_child_family_nbrs(infec_child_nodes, immunize_prob)
+
+                # handle standard classes
+                if len(self.school_nbrs_standard) > 0:
+                    infec_standard = self.spread_ret(self.school_nbrs_standard, self.spreading_child_nodes, school_office_spread_prob)
+                    # with immunize_prob the family of a just infected child becomes immune
+                    self.immunize_child_family_nbrs(infec_standard, immunize_prob)
+
+                # handle alternating split classes
+                if len(self.school_nbrs_split[0]) > 0:
+                    current_class = rnd % 2
+                    infec_split = self.spread_ret(self.school_nbrs_split[current_class], self.spreading_child_nodes, school_office_spread_prob)
+                    self.immunize_child_family_nbrs(infec_split, immunize_prob)
 
             states_per_rnd.append([0] * num_node_states)
             for state in self.node_states.values():
@@ -165,9 +178,11 @@ class Epsim:
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 12:
+    if not (10 <= len(sys.argv) <= 12):
         print('usage: python epsim.py sim_iters family_spread_prob school_office_spread_prob immunize_prob \
-                testing_prob split_classes family.nbrs school.nbrs office.nbrs out.csv')
+                testing_prob family.nbrs office.nbrs out.csv [school_standard.nbrs] [school_split_0.nbrs school_split_1.nbrs]')
+        print('specify either school_standard.nbrs or school_split.nbrs, or both')
+        print('children in school_standard.nbrs visit school every day. children in school_split.nbrs visit school every other day, alternating.')
         quit()
 
     sim_iters = int(sys.argv[1])
@@ -175,14 +190,26 @@ if __name__ == '__main__':
     school_office_spread_prob = float(sys.argv[3])
     immunize_prob = float(sys.argv[4])
     testing_prob = float(sys.argv[5])
-    split_classes = sys.argv[6] == 'true'
-    family_nbrs_path = sys.argv[7]
-    school_nbrs_path = sys.argv[8]
-    office_nbrs_path = sys.argv[9]
-    out_path = sys.argv[10]
+    family_nbrs_path = sys.argv[6]
+    office_nbrs_path = sys.argv[7]
+    out_path = sys.argv[8]
+
+    school_standard = None
+    school_split_0 = None
+    school_split_1 = None
+
+    if len(sys.argv) == 10:
+        school_standard = sys.argv[9]
+    elif len(sys.argv) == 11:
+        school_split_0 = sys.argv[9]
+        school_split_1 = sys.argv[10]
+    else:
+        school_standard = sys.argv[9]
+        school_split_0 = sys.argv[10]
+        school_split_1 = sys.argv[11]
 
     epsim = Epsim()
-    epsim.init_from_files(family_nbrs_path, school_nbrs_path, office_nbrs_path, split_classes)
+    epsim.init_from_files(family_nbrs_path, school_standard, school_split_0, school_split_1, office_nbrs_path)
     x_rounds, y_num_infected = epsim.run_sim(sim_iters, family_spread_prob, school_office_spread_prob, \
                                 immunize_prob, testing_prob)
 
