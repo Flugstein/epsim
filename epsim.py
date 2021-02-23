@@ -60,49 +60,48 @@ class Epsim:
             f.write('round,state_0,state_1,state_2,state_3,state_4,state_5,infec_family,infec_school,infec_office,immunized\n')
             for rnd, states in enumerate(states_per_rnd):
                 info = info_per_rnd[rnd]
-                f.write('{0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10}\n'.format(
+                f.write('{0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11}\n'.format(
                     rnd, states[0], states[1], states[2], states[3], states[4], states[5],
-                    info['infec_family'], info['infec_school'], info['infec_office'], info['immunized']))
+                    info['infec_family'], info['infec_school'], info['infec_office'], info['immunized_detect'], info['immunized_test']))
 
 
     def immunize_node(self, node):
         self.node_states[node] = 5
-        if node in self.infec_nodes:
-            self.infec_nodes.remove(node)
-        if node in self.spreading_child_nodes:
-            self.spreading_child_nodes.remove(node)
-        if node in self.spreading_parent_nodes:
-            self.spreading_parent_nodes.remove(node)
+        self.infec_nodes.discard(node)
+        self.spreading_parent_nodes.discard(node)
+        self.spreading_child_nodes.discard(node)
+        self.spreading_child_nodes_standard.discard(node)
 
 
     def spread(self, nbrs_dict, spreading_nodes, prob):
-        infec_nodes = []
+        infec_nodes = set()
         for spreading_node in spreading_nodes:
             if spreading_node in nbrs_dict:
                 for nbr in nbrs_dict[spreading_node]:
                     if self.node_states[nbr] == 0:
                         if random.random() < prob:
                             self.node_states[nbr] = 1
-                            infec_nodes.append(nbr)
+                            infec_nodes.add(nbr)
         return infec_nodes
 
 
     def immunize_family_nbrs(self, nodes, prob):
-        immunized_nodes = []
+        immunized_nodes = set()
         for node in nodes:
             if random.random() < prob:
                 for nbr in self.family_nbrs[node]:
                     self.immunize_node(nbr)
-                    immunized_nodes.append(nbr)
+                    immunized_nodes.add(nbr)
         return immunized_nodes
 
 
     def immunize_after_testing(self, spreading_nodes, prob):
-        pos_tested_nodes = []
+        pos_tested_nodes = set()
         for spreading_node in spreading_nodes:
             if random.random() < prob:
-                self.immunize_node(spreading_node)
-                pos_tested_nodes.append(spreading_node)
+                pos_tested_nodes.add(spreading_node)
+        for node in pos_tested_nodes:
+            self.immunize_node(node)
         return pos_tested_nodes
 
 
@@ -126,39 +125,49 @@ class Epsim:
 
         for rnd in range(sim_iters):
             weekday = rnd % 7
-            self.infec_nodes = [node for node, state in self.node_states.items() if state in [1, 2, 3, 4]]
-            self.spreading_parent_nodes = [node for node, state in self.node_states.items() if state in [3, 4] and node in self.office_nbrs]
-            self.spreading_child_nodes = [node for node, state in self.node_states.items() if state in [3, 4] and node not in self.office_nbrs]
+            self.infec_nodes = {node for node, state in self.node_states.items() if state in [1, 2, 3, 4]}
+            self.spreading_parent_nodes = {node for node, state in self.node_states.items() if state in [3, 4] and node in self.office_nbrs}
+            self.spreading_child_nodes = {node for node, state in self.node_states.items() if state in [3, 4] and node not in self.office_nbrs}
+            self.spreading_child_nodes_standard = {node for node in self.spreading_child_nodes if node in self.school_nbrs_standard}
 
             # spread in family every day
-            infec_family_nodes = self.spread(self.family_nbrs, self.spreading_parent_nodes + self.spreading_child_nodes, family_spread_prob)
+            infec_family = self.spread(self.family_nbrs, self.spreading_parent_nodes.union(self.spreading_child_nodes), family_spread_prob)
 
             # children are tested on monday morning and if they test positive, them and their families get quarantined
+            immunized_monday_test = set()
             if weekday == 0:
                 pos_tested_child_nodes = self.immunize_after_testing(self.spreading_child_nodes, testing_prob)
                 immunized_family_nbrs = self.immunize_family_nbrs(pos_tested_child_nodes, prob=1.0)
-                immunized_by_monday_test = pos_tested_child_nodes + immunized_family_nbrs
+                immunized_monday_test = pos_tested_child_nodes.union(immunized_family_nbrs)
+
+            # on wednesday children in non-split classes get tested
+            immunized_wednesday_test = set()
+            if weekday == 2:
+                pos_tested_child_nodes = self.immunize_after_testing(self.spreading_child_nodes_standard, testing_prob)
+                immunized_family_nbrs = self.immunize_family_nbrs(pos_tested_child_nodes, prob=1.0)
+                immunized_wednesday_test = pos_tested_child_nodes.union(immunized_family_nbrs) 
 
             # spread in office and school only during weekdays
+            infec_office = set()
+            infec_school_standard = set()
+            infec_school_split = set()
+            immunized_detect_standard = set()
+            immunized_detect_split = set()
             if weekday in [0, 1, 2, 3, 4]:
                 # spread in office
-                infec_office_parent_nodes = self.spread(self.office_nbrs, self.spreading_parent_nodes, school_office_spread_prob)
-                infec_standard = []
-                infec_split = []
-                immunized_standard = []
-                immunized_split = []
+                infec_office = self.spread(self.office_nbrs, self.spreading_parent_nodes, school_office_spread_prob)
 
                 # handle standard classes
                 if len(self.school_nbrs_standard) > 0:
-                    infec_standard = self.spread(self.school_nbrs_standard, self.spreading_child_nodes, school_office_spread_prob)
+                    infec_school_standard = self.spread(self.school_nbrs_standard, self.spreading_child_nodes, school_office_spread_prob)
                     # with detect_prob an infection of a child gets detected (shows symtoms) and its family gets quarantined
-                    immunized_standard = self.immunize_family_nbrs(infec_standard, detect_prob)
+                    immunized_detect_standard = self.immunize_family_nbrs(infec_school_standard, detect_prob)
 
                 # handle alternating split classes
                 if len(self.school_nbrs_split[0]) > 0:
                     current_class = rnd % 2
-                    infec_split = self.spread(self.school_nbrs_split[current_class], self.spreading_child_nodes, school_office_spread_prob)
-                    immunized_split = self.immunize_family_nbrs(infec_split, detect_prob)
+                    infec_school_split = self.spread(self.school_nbrs_split[current_class], self.spreading_child_nodes, school_office_spread_prob)
+                    immunized_detect_split = self.immunize_family_nbrs(infec_school_split, detect_prob)
 
             # all infected nodes increase their state every round
             for infec_node in self.infec_nodes:
@@ -169,10 +178,11 @@ class Epsim:
             for state in self.node_states.values():
                 states_per_rnd[rnd][state] += 1
             info_per_rnd.append({
-                'infec_family': len(infec_family_nodes),
-                'infec_school': len(infec_standard) + len(infec_split),
-                'infec_office': len(infec_office_parent_nodes),
-                'immunized': len(immunized_by_monday_test) + len(immunized_standard) + len(immunized_split)})
+                'infec_family': len(infec_family),
+                'infec_school': len(infec_school_standard) + len(infec_school_split),
+                'infec_office': len(infec_office),
+                'immunized_detect': len(immunized_detect_standard) + len(immunized_detect_split),
+                'immunized_test': len(immunized_monday_test) + len(immunized_wednesday_test)})
             if print_progress:
                 print('{}:\t{}\t{}'.format(rnd, states_per_rnd[rnd], list(info_per_rnd[rnd].values())))
             if export_csv:
