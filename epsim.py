@@ -105,7 +105,7 @@ class Epsim:
         return pos_tested_nodes
 
 
-    def run_sim(self, sim_iters, family_spread_prob, school_office_spread_prob, detect_prob, testing_prob, print_progress=False, export_csv=False):
+    def run_sim(self, sim_iters, family_spread_prob, school_office_spread_prob, detect_prob_child, detect_prob_parent, testing_prob, print_progress=False, export_csv=False):
         num_start_nodes = int(2*math.log(len(self.node_states)))
         start_nodes = random.sample(self.node_states.keys(), num_start_nodes)
         for node in self.node_states:
@@ -115,8 +115,8 @@ class Epsim:
 
         print('starting simulation with n={}, num_start_nodes={}, sim_iters={}'.\
             format(len(self.node_states), len(start_nodes), sim_iters))
-        print('family_spread_prob={}, school_office_spread_prob={}, detect_prob={}, testing_prob={}'.\
-            format(family_spread_prob, school_office_spread_prob, detect_prob, testing_prob))
+        print('family_spread_prob={}, school_office_spread_prob={}, detect_prob_child={}, detect_prob_parent={} testing_prob={}'.\
+            format(family_spread_prob, school_office_spread_prob, detect_prob_child, detect_prob_parent, testing_prob))
         print(f"{len(self.school_nbrs_split[0]) + len(self.school_nbrs_split[1])} children in split classes and {len(self.school_nbrs_standard)} children in standard classes")
         x_rounds = []
         y_num_infec = []
@@ -156,18 +156,20 @@ class Epsim:
             if weekday in [0, 1, 2, 3, 4]:
                 # spread in office
                 infec_office = self.spread(self.office_nbrs, self.spreading_parent_nodes, school_office_spread_prob)
+                # with detect_prob_parent an infection of a parent gets detected (shows symtoms) and its family gets quarantined
+                immunized_detect_office = self.immunize_family_nbrs(infec_office, detect_prob_parent)
 
                 # handle standard classes
                 if len(self.school_nbrs_standard) > 0:
                     infec_school_standard = self.spread(self.school_nbrs_standard, self.spreading_child_nodes, school_office_spread_prob)
-                    # with detect_prob an infection of a child gets detected (shows symtoms) and its family gets quarantined
-                    immunized_detect_standard = self.immunize_family_nbrs(infec_school_standard, detect_prob)
+                    # with detect_prob_child an infection of a child gets detected (shows symtoms) and its family gets quarantined
+                    immunized_detect_standard = self.immunize_family_nbrs(infec_school_standard, detect_prob_child)
 
                 # handle alternating split classes
                 if len(self.school_nbrs_split[0]) > 0:
                     current_class = rnd % 2
                     infec_school_split = self.spread(self.school_nbrs_split[current_class], self.spreading_child_nodes, school_office_spread_prob)
-                    immunized_detect_split = self.immunize_family_nbrs(infec_school_split, detect_prob)
+                    immunized_detect_split = self.immunize_family_nbrs(infec_school_split, detect_prob_child)
 
             # all infected nodes increase their state every round
             for infec_node in self.infec_nodes:
@@ -181,7 +183,7 @@ class Epsim:
                 'infec_family': len(infec_family),
                 'infec_school': len(infec_school_standard) + len(infec_school_split),
                 'infec_office': len(infec_office),
-                'immunized_detect': len(immunized_detect_standard) + len(immunized_detect_split),
+                'immunized_detect': len(immunized_detect_office) + len(immunized_detect_standard) + len(immunized_detect_split),
                 'immunized_test': len(immunized_monday_test) + len(immunized_wednesday_test)})
             if print_progress:
                 print('{}:\t{}\t{}'.format(rnd, states_per_rnd[rnd], list(info_per_rnd[rnd].values())))
@@ -198,7 +200,7 @@ class Epsim:
 
 if __name__ == '__main__':
     if not (10 <= len(sys.argv) <= 12):
-        print('usage: python epsim.py sim_iters family_spread_prob school_office_spread_prob detect_prob \
+        print('usage: python epsim.py sim_iters family_spread_prob school_office_spread_prob detect_prob_child detect_prob_parent \
                 testing_prob family.nbrs office.nbrs out.csv [school_standard.nbrs] [school_split_0.nbrs school_split_1.nbrs]')
         print('specify either school_standard.nbrs or school_split.nbrs, or both')
         print('children in school_standard.nbrs visit school every day. children in school_split.nbrs visit school every other day, alternating.')
@@ -207,30 +209,31 @@ if __name__ == '__main__':
     sim_iters = int(sys.argv[1])
     family_spread_prob = float(sys.argv[2])
     school_office_spread_prob = float(sys.argv[3])
-    detect_prob = float(sys.argv[4])
-    testing_prob = float(sys.argv[5])
-    family_nbrs_path = sys.argv[6]
-    office_nbrs_path = sys.argv[7]
-    out_path = sys.argv[8]
+    detect_prob_child = float(sys.argv[4])
+    detect_prob_parent = float(sys.argv[5])
+    testing_prob = float(sys.argv[6])
+    family_nbrs_path = sys.argv[7]
+    office_nbrs_path = sys.argv[8]
+    out_path = sys.argv[9]
 
     school_standard = None
     school_split_0 = None
     school_split_1 = None
 
-    if len(sys.argv) == 10:
-        school_standard = sys.argv[9]
-    elif len(sys.argv) == 11:
-        school_split_0 = sys.argv[9]
-        school_split_1 = sys.argv[10]
-    else:
-        school_standard = sys.argv[9]
+    if len(sys.argv) == 11:
+        school_standard = sys.argv[10]
+    elif len(sys.argv) == 12:
         school_split_0 = sys.argv[10]
         school_split_1 = sys.argv[11]
+    else:
+        school_standard = sys.argv[10]
+        school_split_0 = sys.argv[11]
+        school_split_1 = sys.argv[12]
 
     epsim = Epsim()
     epsim.init_from_files(family_nbrs_path, school_standard, school_split_0, school_split_1, office_nbrs_path)
     x_rounds, y_num_infec = epsim.run_sim(sim_iters, family_spread_prob, school_office_spread_prob,
-                                          detect_prob, testing_prob)
+                                          detect_prob_child, detect_prob_parent, testing_prob)
 
     with open(out_path, 'w') as f:
         for i in range(len(x_rounds)):
