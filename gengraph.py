@@ -19,12 +19,12 @@ def chunks(lst, n):
 
 
 class EpsimGraph:
-    def __init__(self, k, office_sigma, split_classes_perc):
+    def __init__(self, k, sigma_office, perc_split_classes):
         self.k = k
-        self.split_classes_perc = split_classes_perc
+        self.perc_split_classes = perc_split_classes
         self.nodes = {i: True for i in range(2*k)}
-        assert office_sigma > 0 and office_sigma <= 0.5
-        self.office_sigma = office_sigma
+        assert sigma_office > 0 and sigma_office <= 0.5
+        self.sigma_office = sigma_office
         self.id_bump = 2*k
         self.child_nodes = set(range(k))
         self.parent_nodes = set(range(k, 2*k))
@@ -122,7 +122,7 @@ class EpsimGraph:
 
 
     def create_graph(self):
-        print('creating graph with k={}, office_sigma={}'.format(self.k, self.office_sigma))
+        print('creating graph with k={}, sigma_office={}'.format(self.k, self.sigma_office))
         print('randomly cluster children and parent nodes, such that there are child-parent pairs')
         children2parents = list(self.parent_nodes)
         random.shuffle(children2parents)
@@ -203,23 +203,23 @@ class EpsimGraph:
                     adjlist[node] = set(nbrs)
             return adjlist
 
-        breakpoint = int(len(children_splits) * self.split_classes_perc)
+        breakpoint = int(len(children_splits) * self.perc_split_classes)
         self.school_nbrs_split = [make_grid(x, children_splits[:breakpoint]) for x in {0,1}]
         self.school_nbrs_standard = make_grid(2, children_splits[breakpoint:])
         print(f"\t{len(self.school_nbrs_split[0]) + len(self.school_nbrs_split[1])} children in split classes and {len(self.school_nbrs_standard)} children in standard classes ({len(children_shuffle)} total, break: {breakpoint})")
 
-        print('parents: cluster 1-office_sigma no change, office_sigma*1/2 cluster 2 nodes, office_sigma*1/4 cluster 3 nodes, office_sigma*1/8 cluster 4 nodes, office_sigma*1/8 cluster 5 nodes')
+        print('parents: cluster 1-sigma_office no change, sigma_office*1/2 cluster 2 nodes, sigma_office*1/4 cluster 3 nodes, sigma_office*1/8 cluster 4 nodes, sigma_office*1/8 cluster 5 nodes')
         parents_shuffle = list(self.parent_nodes)
         random.shuffle(parents_shuffle)
         parents_splits = []
         divisor = 2
         cap = 16
         len_sum = 0
-        parents_split = parents_shuffle[len_sum : len_sum + int(math.ceil(len(self.parent_nodes) * (1 - self.office_sigma)))]
+        parents_split = parents_shuffle[len_sum : len_sum + int(math.ceil(len(self.parent_nodes) * (1 - self.sigma_office)))]
         parents_splits.append(parents_split)
         len_sum += len(parents_split)
         while len_sum < len(self.parent_nodes):
-            parents_split = parents_shuffle[len_sum : len_sum + int(math.ceil(len(self.parent_nodes) * self.office_sigma / divisor))]
+            parents_split = parents_shuffle[len_sum : len_sum + int(math.ceil(len(self.parent_nodes) * self.sigma_office / divisor))]
             parents_splits.append(parents_split)
             len_sum += len(parents_split)
             divisor *= 2
@@ -229,7 +229,7 @@ class EpsimGraph:
                 break
 
         cluster_size = 2
-        for parents_split in parents_splits[1:]:  # skip 1-office_sigma split
+        for parents_split in parents_splits[1:]:  # skip 1-sigma_office split
             cluster_splits = list(chunks(parents_split, cluster_size))
             for cluster_split in cluster_splits:
                 for node in cluster_split:
@@ -241,20 +241,20 @@ class EpsimGraph:
 
 if __name__ == '__main__':
     if len(sys.argv) != 7:
-        print('usage: python gengraph.py k office_sigma split_classes_perc family.nbrs school.nbrs office.nbrs')
-        print('\tsplit_classes_perc: percentage of classes to split into two alternating classes')
+        print('usage: python gengraph.py k sigma_office perc_split_classes family.nbrs school.nbrs office.nbrs')
+        print('\tperc_split_classes: percentage of classes to split into two alternating classes')
         quit()
 
     random.seed(0)
     k = int(sys.argv[1])
-    office_sigma = float(sys.argv[2])
-    split_classes_perc = float(sys.argv[3])
+    sigma_office = float(sys.argv[2])
+    perc_split_classes = float(sys.argv[3])
     family_nbrs_path = sys.argv[4]
     school_nbrs_path = sys.argv[5]
     office_nbrs_path = sys.argv[6]
 
     print('create graph')
-    g = EpsimGraph(k, office_sigma, split_classes_perc)
+    g = EpsimGraph(k, sigma_office, perc_split_classes)
     print('nodes: {}'.format(len(g.nodes)))
     g.write(family_nbrs_path, school_nbrs_path, office_nbrs_path)
 
