@@ -57,7 +57,7 @@ class Epsim:
 
     def write_csv(self, file_path, states_per_rnd, info_per_rnd):
         with open(file_path, 'w') as f:
-            f.write('round,state_0,state_1,state_2,state_3,state_4,state_5,infec_family,infec_school,infec_office,immunized\n')
+            f.write('round,state_0,state_1,state_2,state_3,state_4,state_5,infec_family,infec_school,infec_office,immunized_detect,immunized_test\n')
             for rnd, states in enumerate(states_per_rnd):
                 info = info_per_rnd[rnd]
                 f.write('{0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11}\n'.format(
@@ -187,14 +187,14 @@ class Epsim:
                 'immunized_test': len(immunized_monday_test) + len(immunized_wednesday_test)})
             if print_progress:
                 print('{}:\t{}\t{}'.format(rnd, states_per_rnd[rnd], list(info_per_rnd[rnd].values())))
-            if export_csv:
-                self.write_csv(export_csv, states_per_rnd, info_per_rnd)
 
             num_infec = sum(states_per_rnd[rnd][1:])
             x_rounds.append(rnd)
             y_num_infec.append(num_infec)
 
         print('infected nodes: {}\n'.format(num_infec))
+        if export_csv:
+            self.write_csv(export_csv, states_per_rnd, info_per_rnd)
         return x_rounds, y_num_infec
 
 
