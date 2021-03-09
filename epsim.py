@@ -1,8 +1,7 @@
 import sys
-import numpy as np
 import random
 import math
-import time
+from pathlib import Path
 
 ### node states ###
 # 0 not infected
@@ -57,12 +56,11 @@ class Epsim:
 
     def write_csv(self, file_path, states_per_rnd, info_per_rnd):
         with open(file_path, 'w') as f:
-            f.write('round,state_0,state_1,state_2,state_3,state_4,state_5,infec_family,infec_school,infec_office,immunized_detect,immunized_test\n')
+            f.write("round,state_0,state_1,state_2,state_3,state_4,state_5,infec_family,infec_school,infec_office,immunized_detect,immunized_test\n")
             for rnd, states in enumerate(states_per_rnd):
                 info = info_per_rnd[rnd]
-                f.write('{0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11}\n'.format(
-                    rnd, states[0], states[1], states[2], states[3], states[4], states[5],
-                    info['infec_family'], info['infec_school'], info['infec_office'], info['immunized_detect'], info['immunized_test']))
+                f.write(f"{rnd},{states[0]},{states[1]},{states[1]},{states[3]},{states[4]},{states[5]},{info['infec_family']},\
+                          {info['infec_school']},{info['infec_office']},{info['immunized_detect']},{info['immunized_test']}")
 
 
     def immunize_node(self, node):
@@ -113,11 +111,12 @@ class Epsim:
         for node in start_nodes:
             self.node_states[node] = 1
 
-        print('starting simulation with n={}, num_start_nodes={}, sim_iters={}'.\
-            format(len(self.node_states), len(start_nodes), sim_iters))
-        print('p_spread_family={}, p_spread_school_office={}, p_detect_child={}, p_detect_parent={} p_testing={}'.\
-            format(p_spread_family, p_spread_school_office, p_detect_child, p_detect_parent, p_testing))
-        print(f"{len(self.school_nbrs_split[0]) + len(self.school_nbrs_split[1])} children in split classes and {len(self.school_nbrs_standard)} children in standard classes")
+        print(f"starting simulation with n={len(self.node_states)}, num_start_nodes={len(start_nodes)}, sim_iters={sim_iters}")
+        print(f"p_spread_family={p_spread_family}, p_spread_school_office={p_spread_school_office}, p_detect_child={p_detect_child}, \
+                p_detect_parent={p_detect_parent}, p_testing={p_testing}")
+        print(f"family_nbrs: {len(self.family_nbrs)}, school_nbrs_standard: {len(self.school_nbrs_standard)}, \
+                school_nbrs_split: {len(self.school_nbrs_split[0])} {len(self.school_nbrs_split[1])}, office_nbrs: {len(self.office_nbrs)}")
+
         x_rounds = []
         y_num_infec = []
         states_per_rnd = []
@@ -127,7 +126,10 @@ class Epsim:
             weekday = rnd % 7
             self.infec_nodes = {node for node, state in self.node_states.items() if state in [1, 2, 3, 4]}
             self.spreading_parent_nodes = {node for node, state in self.node_states.items() if state in [3, 4] and node in self.office_nbrs}
-            self.spreading_child_nodes = {node for node, state in self.node_states.items() if state in [3, 4] and node not in self.office_nbrs}
+            self.spreading_child_nodes = {node for node, state in self.node_states.items() if state in [3, 4] and (
+                                          node in self.school_nbrs_standard \
+                                          or node in self.school_nbrs_split[0] \
+                                          or node in self.school_nbrs_split[1])}
             self.spreading_child_nodes_standard = {node for node in self.spreading_child_nodes if node in self.school_nbrs_standard}
 
             # spread in family every day
@@ -186,13 +188,13 @@ class Epsim:
                 'immunized_detect': len(immunized_detect_office) + len(immunized_detect_standard) + len(immunized_detect_split),
                 'immunized_test': len(immunized_monday_test) + len(immunized_wednesday_test)})
             if print_progress:
-                print('{}:\t{}\t{}'.format(rnd, states_per_rnd[rnd], list(info_per_rnd[rnd].values())))
+                print(f"{rnd}:\t{states_per_rnd[rnd]}\t{list(info_per_rnd[rnd].values())}")
 
             num_infec = sum(states_per_rnd[rnd][1:])
             x_rounds.append(rnd)
             y_num_infec.append(num_infec)
 
-        print('infected nodes: {}\n'.format(num_infec))
+        print(f"infected nodes: {num_infec}\n")
         if export_csv:
             self.write_csv(export_csv, states_per_rnd, info_per_rnd)
         return x_rounds, y_num_infec
@@ -200,10 +202,10 @@ class Epsim:
 
 if __name__ == '__main__':
     if not (10 <= len(sys.argv) <= 12):
-        print('usage: python epsim.py sim_iters p_spread_family p_spread_school_office p_detect_child p_detect_parent \
-                p_testing family.nbrs office.nbrs out.csv [school_standard.nbrs] [school_split_0.nbrs school_split_1.nbrs]')
-        print('specify either school_standard.nbrs or school_split.nbrs, or both')
-        print('children in school_standard.nbrs visit school every day. children in school_split.nbrs visit school every other day, alternating.')
+        print("usage: python epsim.py sim_iters p_spread_family p_spread_school_office p_detect_child p_detect_parent \
+               p_testing family.nbrs office.nbrs out.csv [school_standard.nbrs] [school_split_0.nbrs school_split_1.nbrs]")
+        print("specify either school_standard.nbrs or school_split.nbrs, or both")
+        print("children in school_standard.nbrs visit school every day. children in school_split.nbrs visit school every other day, alternating.")
         quit()
 
     sim_iters = int(sys.argv[1])
@@ -212,23 +214,22 @@ if __name__ == '__main__':
     p_detect_child = float(sys.argv[4])
     p_detect_parent = float(sys.argv[5])
     p_testing = float(sys.argv[6])
-    family_nbrs_path = sys.argv[7]
-    office_nbrs_path = sys.argv[8]
-    out_path = sys.argv[9]
-
-    school_standard = None
-    school_split_0 = None
-    school_split_1 = None
+    family_nbrs_path = Path(sys.argv[7])
+    office_nbrs_path = Path(sys.argv[8])
+    out_path = Path(sys.argv[9])
 
     if len(sys.argv) == 11:
-        school_standard = sys.argv[10]
+        school_standard = Path(sys.argv[10])
+        school_split_0 = None
+        school_split_1 = None
     elif len(sys.argv) == 12:
-        school_split_0 = sys.argv[10]
-        school_split_1 = sys.argv[11]
+        school_standard = None
+        school_split_0 = Path(sys.argv[10])
+        school_split_1 = Path(sys.argv[11])
     else:
-        school_standard = sys.argv[10]
-        school_split_0 = sys.argv[11]
-        school_split_1 = sys.argv[12]
+        school_standard = Path(sys.argv[10])
+        school_split_0 = Path(sys.argv[11])
+        school_split_1 = Path(sys.argv[12])
 
     epsim = Epsim()
     epsim.init_from_files(family_nbrs_path, school_standard, school_split_0, school_split_1, office_nbrs_path)
@@ -237,4 +238,4 @@ if __name__ == '__main__':
 
     with open(out_path, 'w') as f:
         for i in range(len(x_rounds)):
-            f.write('{}, {}\n'.format(x_rounds[i], y_num_infec[i]))
+            f.write(f"{x_rounds[i]}, {y_num_infec[i]}\n")

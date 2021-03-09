@@ -1,19 +1,12 @@
 import sys
-import numpy as np
 import random
 import math
-
-# filename_extend("myfile.txt", "_v2") -> "myfile_v2.txt"
-def filename_extend(path, ext):
-    split = path.split(".")
-    if len(split) > 1:
-        split[-2] += ext
-        return ".".join(split)
-    return path + ext
+import numpy as np
+from pathlib import Path
 
 
 def chunks(lst, n):
-    '''Yield successive n-sized chunks from lst'''
+    """Yield successive n-sized chunks from lst"""
     for i in range(0, len(lst), n):
         yield lst[i:i + n]
 
@@ -84,13 +77,13 @@ class EpsimGraph:
         with open(nbrs_file_path, 'w') as f:
             for node in sorted(nbrs_dict.keys()):
                 nbrs = nbrs_dict[node]
-                f.write('{}: '.format(node))
+                f.write(f"{node}: ")
                 if len(nbrs) == 0:
-                    f.write('\n')
+                    f.write("\n")
                 else:
                     for nbr in nbrs[:-1]:
-                        f.write('{} '.format(nbr))
-                    f.write('{}\n'.format(nbrs[-1]))
+                        f.write(f"{nbr} ")
+                    f.write(f"{nbrs[-1]}\n")
 
 
     def write(self, family_nbrs_path, school_nbrs_path, office_nbrs_path):
@@ -101,36 +94,37 @@ class EpsimGraph:
 
         new_family_nbrs = self.conv2new(self.family_nbrs, old2new)
         self.write_nbrs(new_family_nbrs, family_nbrs_path)
-        print('family_nbrs written')
+        print("family_nbrs written")
 
         if len(self.school_nbrs_standard) > 0:
-            new_school_nbrs = self.conv2new(self.school_nbrs_standard, old2new)
-            path = filename_extend(school_nbrs_path, "_standard")
-            self.write_nbrs(new_school_nbrs, path)
+            nbrs = self.conv2new(self.school_nbrs_standard, old2new)
+            path = school_nbrs_path.with_stem(school_nbrs_path.stem + "_standard")
+            self.write_nbrs(nbrs, path)
             print(f'{path} written')
 
         if len(self.school_nbrs_split[0]) > 0:
             for i in range(len(self.school_nbrs_split)):
-                new_school_nbrs = self.conv2new(self.school_nbrs_split[i], old2new)
-                path = filename_extend(school_nbrs_path, f"_split_{i}")
-                self.write_nbrs(new_school_nbrs, path)
+                nbrs = self.conv2new(self.school_nbrs_split[i], old2new)
+                path = school_nbrs_path.with_stem(school_nbrs_path.stem + f"_split_{i}")
+                self.write_nbrs(nbrs, path)
                 print(f'{path} written')
 
         new_office_nbrs = self.conv2new(self.office_nbrs, old2new)
         self.write_nbrs(new_office_nbrs, office_nbrs_path)
-        print('office_nbrs nbrs written')
+        print("office_nbrs nbrs written")
 
 
     def create_graph(self):
-        print('creating graph with k={}, sigma_office={}'.format(self.k, self.sigma_office))
-        print('randomly cluster children and parent nodes, such that there are child-parent pairs')
+        print(f"creating graph with k={self.k}, sigma_office={self.sigma_office}")
+        print("randomly cluster children and parent nodes, such that there are child-parent pairs")
         children2parents = list(self.parent_nodes)
         random.shuffle(children2parents)
         for child_node, parent_node in enumerate(children2parents):
             self.family_nbrs[child_node] = {parent_node}
             self.family_nbrs[parent_node] = {child_node}
 
-        print('parents: 1/2 no change, 1/4 merge 2 nodes, 1/8 merge 3 nodes, ...')
+        # parents: 1/2 no change, 1/4 merge 2 nodes, 1/8 merge 3 nodes, ...
+        print("parents: 1/2 no change, 1/4 merge 2, 1/8 merge 3, ...")
         parents_shuffle = list(self.parent_nodes)
         random.shuffle(parents_shuffle)
         parents_splits = []
@@ -149,13 +143,17 @@ class EpsimGraph:
                 self.merge_parents(merge_split[0], merge_split[1:])
             merge_size += 1
 
-        print('parents: duplicate every node')
+        # parents: duplicate every node
+        print("parents: duplicate")
         parent_nodes = self.parent_nodes.copy()
         for parent_node in parent_nodes:
             self.duplicate_parents(parent_node)
 
+        # children: k/l^2 many l*l grids, randomly place l^2 nodes on grid, cluster 8-neighbourhood
+        # perc_split_classes many grids (school classes) are divided into 2, with a sparser grid
         l = 5
-        print('children: k/l^2 many l*l grids, place l^2 nodes randomly on grid, cluster 8 neighbourhood, with l={}'.format(l))
+        print(f"children: {self.k}/{l}^2 many {l}*{l} grids, randomly place {l}^2 nodes on grid, cluster 8-nbrhood")
+        print(f"{self.perc_split_classes * 100}% many grids (school classes) are divided into 2, with a sparser grid")
         children_shuffle = list(self.child_nodes)
         random.shuffle(children_shuffle)
         children_splits = list(chunks(children_shuffle, l*l))
@@ -203,12 +201,15 @@ class EpsimGraph:
                     adjlist[node] = set(nbrs)
             return adjlist
 
-        breakpoint = int(len(children_splits) * self.perc_split_classes)
-        self.school_nbrs_split = [make_grid(x, children_splits[:breakpoint]) for x in {0,1}]
-        self.school_nbrs_standard = make_grid(2, children_splits[breakpoint:])
-        print(f"\t{len(self.school_nbrs_split[0]) + len(self.school_nbrs_split[1])} children in split classes and {len(self.school_nbrs_standard)} children in standard classes ({len(children_shuffle)} total, break: {breakpoint})")
+        brkpnt = int(len(children_splits) * self.perc_split_classes)
+        self.school_nbrs_split = [make_grid(x, children_splits[:brkpnt]) for x in {0,1}]
+        self.school_nbrs_standard = make_grid(2, children_splits[brkpnt:])
+        print(f"{len(self.school_nbrs_split[0]) + len(self.school_nbrs_split[1])} children in split classes \
+                {len(self.school_nbrs_standard)} children in standard classes ({len(children_shuffle)} total, break: {brkpnt})")
 
-        print('parents: cluster 1-sigma_office no change, sigma_office*1/2 cluster 2 nodes, sigma_office*1/4 cluster 3 nodes, sigma_office*1/8 cluster 4 nodes, sigma_office*1/8 cluster 5 nodes')
+        # parents: cluster 1-sigma_office no change, sigma_office*1/2 cluster 2 nodes, sigma_office*1/4 cluster 3 nodes, 
+        # sigma_office*1/8 cluster 4 nodes, sigma_office*1/8 cluster 5 nodes
+        print(f"parents: cluster 1-{sigma_office} no change, {sigma_office}*1/2 cluster 2, {sigma_office}*1/4 cluster 3, ...")
         parents_shuffle = list(self.parent_nodes)
         random.shuffle(parents_shuffle)
         parents_splits = []
@@ -241,20 +242,18 @@ class EpsimGraph:
 
 if __name__ == '__main__':
     if len(sys.argv) != 7:
-        print('usage: python gengraph.py k sigma_office perc_split_classes family.nbrs school.nbrs office.nbrs')
-        print('\tperc_split_classes: percentage of classes to split into two alternating classes')
+        print("usage: python gengraph.py k sigma_office perc_split_classes family.nbrs school.nbrs office.nbrs")
         quit()
 
     random.seed(0)
     k = int(sys.argv[1])
     sigma_office = float(sys.argv[2])
     perc_split_classes = float(sys.argv[3])
-    family_nbrs_path = sys.argv[4]
-    school_nbrs_path = sys.argv[5]
-    office_nbrs_path = sys.argv[6]
+    family_nbrs_path = Path(sys.argv[4])
+    school_nbrs_path = Path(sys.argv[5])
+    office_nbrs_path = Path(sys.argv[6])
 
-    print('create graph')
+    print("create graph")
     g = EpsimGraph(k, sigma_office, perc_split_classes)
-    print('nodes: {}'.format(len(g.nodes)))
+    print(f"nodes: {len(g.nodes)}")
     g.write(family_nbrs_path, school_nbrs_path, office_nbrs_path)
-
