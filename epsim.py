@@ -7,10 +7,11 @@ from pathlib import Path
 # 0 not infected
 # 1 infected: incubation
 # 2 infected: incubation
-# 3 infected: spreading
+# 3 infected_ incubation
 # 4 infected: spreading
-# 5 immune
-num_node_states = 6
+# 5 infected: spreading
+# 6 immune
+num_node_states = 7
 
 
 def chunks(lst, n):
@@ -81,7 +82,7 @@ class Epsim:
 
 
     def immunize_node(self, node):
-        self.node_states[node] = 5
+        self.node_states[node] = 6
         self.infec_nodes.discard(node)
         self.spreading_parent_nodes.discard(node)
         self.spreading_child_nodes.discard(node)
@@ -125,13 +126,13 @@ class Epsim:
         for node in self.node_states:
             self.node_states[node] = 0
         
-        start_nodes_per_state = list(chunks(random.sample(self.node_states.keys(), num_start_nodes), int(num_start_nodes / 4)))
+        start_nodes_per_state = list(chunks(random.sample(self.node_states.keys(), num_start_nodes), int(num_start_nodes / 5)))
         for i, start_nodes in enumerate(start_nodes_per_state, 1):
             for node in start_nodes:
                 self.node_states[node] = i
 
         for node in random.sample(self.node_states.keys(), num_immuinzed_nodes):
-            self.node_states[node] = 5
+            self.node_states[node] = 6
 
         print(f"starting simulation with n={len(self.node_states)}, num_start_nodes={num_start_nodes}, num_immuinzed_nodes={num_immuinzed_nodes}, " \
               + f"sim_iters={sim_iters}")
@@ -142,7 +143,7 @@ class Epsim:
 
         if print_progress:
             print("the following information represents the number of nodes per round for:")
-            print("round:  [state_0, state_1, state_2, state_3, state_4, state_5]" \
+            print("round:  [state_0, state_1, state_2, state_3, state_4, state_5, state_6]" \
                   + "  [infec_family, infec_school, infec_office, infec_children, infec_parents, immunized_detect, immunized_test]")
 
         num_infec_per_rnd = []
@@ -151,9 +152,9 @@ class Epsim:
 
         for rnd in range(sim_iters):
             weekday = rnd % 7
-            self.infec_nodes = {node for node, state in self.node_states.items() if state in [1, 2, 3, 4]}
-            self.spreading_parent_nodes = {node for node, state in self.node_states.items() if state in [3, 4] and node in self.office_nbrs}
-            self.spreading_child_nodes = {node for node, state in self.node_states.items() if state in [3, 4] and (
+            self.infec_nodes = {node for node, state in self.node_states.items() if state in [1, 2, 3, 4, 5]}
+            self.spreading_parent_nodes = {node for node, state in self.node_states.items() if state in [4, 5] and node in self.office_nbrs}
+            self.spreading_child_nodes = {node for node, state in self.node_states.items() if state in [4, 5] and (
                                           node in self.school_nbrs_standard \
                                           or node in self.school_nbrs_split[0] \
                                           or node in self.school_nbrs_split[1])}

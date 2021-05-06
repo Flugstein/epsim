@@ -16,7 +16,6 @@ class EpsimGraph:
         self.k = k
         self.perc_split_classes = perc_split_classes
         self.nodes = {i: True for i in range(2*k)}
-        assert sigma_office > 0 and sigma_office <= 0.5
         self.sigma_office = sigma_office
         self.id_bump = 2*k
         self.child_nodes = set(range(k))
