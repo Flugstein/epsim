@@ -121,7 +121,7 @@ class Epsim:
         return pos_tested_nodes
 
 
-    def run_sim(self, sim_iters, num_start_nodes, num_immuinzed_nodes, p_spread_family, p_spread_school, p_spread_office, p_detect_child, p_detect_parent,
+    def run_sim(self, sim_iters, num_start_nodes, num_immunized_nodes, p_spread_family, p_spread_school, p_spread_office, p_detect_child, p_detect_parent,
                 p_testing, print_progress=False, export_csv=False):
         for node in self.node_states:
             self.node_states[node] = 0
@@ -131,10 +131,10 @@ class Epsim:
             for node in start_nodes:
                 self.node_states[node] = i
 
-        for node in random.sample(self.node_states.keys(), num_immuinzed_nodes):
+        for node in random.sample(self.node_states.keys(), num_immunized_nodes):
             self.node_states[node] = 6
 
-        print(f"starting simulation with n={len(self.node_states)}, num_start_nodes={num_start_nodes}, num_immuinzed_nodes={num_immuinzed_nodes}, " \
+        print(f"starting simulation with n={len(self.node_states)}, num_start_nodes={num_start_nodes}, num_immunized_nodes={num_immunized_nodes}, " \
               + f"sim_iters={sim_iters}")
         print(f"p_spread_family={p_spread_family}, p_spread_school={p_spread_school}, p_spread_office={p_spread_office}, p_detect_child={p_detect_child}, " \
               + f"p_detect_parent={p_detect_parent}, p_testing={p_testing}")
@@ -232,7 +232,7 @@ class Epsim:
 
 if __name__ == '__main__':
     if not (13 <= len(sys.argv) <= 16):
-        print("usage: python epsim.py sim_iters num_start_nodes num_immuinzed_nodes p_spread_family p_spread_school p_spread_office p_detect_child" \
+        print("usage: python epsim.py sim_iters num_start_nodes num_immunized_nodes p_spread_family p_spread_school p_spread_office p_detect_child" \
               + " p_detect_parent p_testing family.nbrs office.nbrs out.csv [school_standard.nbrs] [school_split_0.nbrs school_split_1.nbrs]")
         print("specify either school_standard.nbrs or school_split.nbrs, or both")
         print("children in school_standard.nbrs visit school every day. children in school_split.nbrs visit school every other day, alternating.")
@@ -240,7 +240,7 @@ if __name__ == '__main__':
 
     sim_iters = int(sys.argv[1])
     num_start_nodes = int(sys.argv[2])
-    num_immuinzed_nodes = int(sys.argv[3])
+    num_immunized_nodes = int(sys.argv[3])
     p_spread_family = float(sys.argv[4])
     p_spread_school = float(sys.argv[5])
     p_spread_office = float(sys.argv[6])
@@ -266,7 +266,7 @@ if __name__ == '__main__':
 
     epsim = Epsim()
     epsim.init_from_files(family_nbrs_path, school_standard, school_split_0, school_split_1, office_nbrs_path)
-    num_infec_per_rnd = epsim.run_sim(sim_iters, num_start_nodes, num_immuinzed_nodes, p_spread_family, p_spread_school, p_spread_office,
+    num_infec_per_rnd = epsim.run_sim(sim_iters, num_start_nodes, num_immunized_nodes, p_spread_family, p_spread_school, p_spread_office,
                                       p_detect_child, p_detect_parent, p_testing)
 
     with open(out_path, 'w') as f:
