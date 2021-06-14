@@ -228,6 +228,9 @@ class EpsimGraph:
                 parents_splits.append(parents_split)
                 break
 
+        for node in parents_splits[0]: # 1-sigma_office split
+            self.office_nbrs[node] = {}
+
         cluster_size = 2
         for parents_split in parents_splits[1:]:  # skip 1-sigma_office split
             cluster_splits = list(chunks(parents_split, cluster_size))
