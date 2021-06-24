@@ -13,6 +13,13 @@ def chunks(lst, n):
 
 class EpsimGraph:
     def __init__(self, k, sigma_office, perc_split_classes):
+        """
+        Generate a graph for epidemic simulation with the given parameters.
+        
+        k -- determines the number of nodes in the graph (will be approx. 2*k)
+        sigma_office -- determines the distribution of parents to the offices
+        perc_split_classes -- percentage of school classes that are split in half and alternate a shared classroom every day
+        """
         self.k = k
         self.perc_split_classes = perc_split_classes
         self.nodes = {i: True for i in range(2*k)}
@@ -242,22 +249,3 @@ class EpsimGraph:
             cluster_size += 1
 
         print("gaph generation finished\n")
-
-
-if __name__ == '__main__':
-    if len(sys.argv) != 7:
-        print("usage: python gengraph.py k sigma_office perc_split_classes family.nbrs school.nbrs office.nbrs")
-        quit()
-
-    random.seed(0)
-    k = int(sys.argv[1])
-    sigma_office = float(sys.argv[2])
-    perc_split_classes = float(sys.argv[3])
-    family_nbrs_path = Path(sys.argv[4])
-    school_nbrs_path = Path(sys.argv[5])
-    office_nbrs_path = Path(sys.argv[6])
-
-    print("create graph")
-    g = EpsimGraph(k, sigma_office, perc_split_classes)
-    print(f"nodes: {len(g.nodes)}")
-    g.write(family_nbrs_path, school_nbrs_path, office_nbrs_path)

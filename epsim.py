@@ -121,12 +121,34 @@ class Epsim:
         return pos_tested_nodes
 
 
-    def run_sim(self, sim_iters, num_start_nodes, num_immunized_nodes, p_spread_family, p_spread_school, p_spread_office, p_detect_child, p_detect_parent,
-                p_testing, print_progress=False, export_csv=False):
+    def run_sim(self, sim_iters, num_start_nodes, num_immunized_nodes, start_weekday, p_spread_family, p_spread_school, p_spread_office, p_detect_child, 
+                p_detect_parent, p_testing, print_progress=False, export_csv=False):
+        """
+        Run the epidemic simulation with the given parameters.
+
+        sim_iters -- number of iterations/rounds to simulate
+        num_start_nodes -- number of initially infecteded nodes
+                           can be a single value, where the nodes get disributed equally over all states, or a list with the exact number of nodes per state
+        num_immunized_nodes -- number of initially immunized nodes
+        start_weekday -- weekday to start the simulation with (0: Monday, 1: Tuesday, ..., 6: Sunday)
+        p_spread_family -- probability to spread the infection within the family
+        p_spread_school -- probability to spread the infection within the school
+        p_spread_office -- probability to spread the infection within the office
+        p_detect_child -- probability that an infected child gets detected and quarantined because of its symtoms
+        p_detect_parent -- probability that an infected parent gets detected and quarantined because of its symtoms
+        p_testing -- probability that a test detects an infected person
+        print_progress -- print simulation statistics every round onto the console
+        export_csv -- export simulation statistics to a csv file
+        """
         for node in self.node_states:
             self.node_states[node] = 0
         
-        start_nodes_per_state = list(chunks(random.sample(self.node_states.keys(), num_start_nodes), int(num_start_nodes / 5)))
+        if isinstance(num_start_nodes, int):
+            num_start_nodes = [int(num_start_nodes / 5)] * 5
+        if not isinstance(num_start_nodes, list) and len(num_start_nodes) != num_node_states - 2:  # without not infected and immune states
+            raise ValueError("num_start_nodes has wrong format")
+        sampled_nodes = random.sample(self.node_states.keys(), sum(num_start_nodes))
+        start_nodes_per_state = [[sampled_nodes.pop() for i in range(num)] for num in num_start_nodes]
         for i, start_nodes in enumerate(start_nodes_per_state, 1):
             for node in start_nodes:
                 self.node_states[node] = i
@@ -151,7 +173,7 @@ class Epsim:
         info_per_rnd = []
 
         for rnd in range(sim_iters):
-            weekday = rnd % 7
+            weekday = rnd + start_weekday % 7
             self.infec_nodes = {node for node, state in self.node_states.items() if state in [1, 2, 3, 4, 5]}
             self.spreading_parent_nodes = {node for node, state in self.node_states.items() if state in [4, 5] and node in self.office_nbrs}
             self.spreading_child_nodes = {node for node, state in self.node_states.items() if state in [4, 5] and (
@@ -228,47 +250,3 @@ class Epsim:
         if export_csv:
             self.write_csv(export_csv, states_per_rnd, info_per_rnd)
         return num_infec_per_rnd
-
-
-if __name__ == '__main__':
-    if not (13 <= len(sys.argv) <= 16):
-        print("usage: python epsim.py sim_iters num_start_nodes num_immunized_nodes p_spread_family p_spread_school p_spread_office p_detect_child" \
-              + " p_detect_parent p_testing family.nbrs office.nbrs out.csv [school_standard.nbrs] [school_split_0.nbrs school_split_1.nbrs]")
-        print("specify either school_standard.nbrs or school_split.nbrs, or both")
-        print("children in school_standard.nbrs visit school every day. children in school_split.nbrs visit school every other day, alternating.")
-        quit()
-
-    sim_iters = int(sys.argv[1])
-    num_start_nodes = int(sys.argv[2])
-    num_immunized_nodes = int(sys.argv[3])
-    p_spread_family = float(sys.argv[4])
-    p_spread_school = float(sys.argv[5])
-    p_spread_office = float(sys.argv[6])
-    p_detect_child = float(sys.argv[7])
-    p_detect_parent = float(sys.argv[8])
-    p_testing = float(sys.argv[9])
-    family_nbrs_path = Path(sys.argv[10])
-    office_nbrs_path = Path(sys.argv[11])
-    out_path = Path(sys.argv[12])
-
-    if len(sys.argv) == 14:
-        school_standard = Path(sys.argv[13])
-        school_split_0 = None
-        school_split_1 = None
-    elif len(sys.argv) == 15:
-        school_standard = None
-        school_split_0 = Path(sys.argv[13])
-        school_split_1 = Path(sys.argv[14])
-    else:
-        school_standard = Path(sys.argv[13])
-        school_split_0 = Path(sys.argv[14])
-        school_split_1 = Path(sys.argv[15])
-
-    epsim = Epsim()
-    epsim.init_from_files(family_nbrs_path, school_standard, school_split_0, school_split_1, office_nbrs_path)
-    num_infec_per_rnd = epsim.run_sim(sim_iters, num_start_nodes, num_immunized_nodes, p_spread_family, p_spread_school, p_spread_office,
-                                      p_detect_child, p_detect_parent, p_testing)
-
-    with open(out_path, 'w') as f:
-        for i in range(len(num_infec_per_rnd)):
-            f.write(f"{i}, {num_infec_per_rnd[i]}\n")
