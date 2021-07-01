@@ -81,14 +81,6 @@ class Epsim:
                 f.write("\n")
 
 
-    def immunize_node(self, node):
-        self.node_states[node] = 6
-        self.infec_nodes.discard(node)
-        self.spreading_parent_nodes.discard(node)
-        self.spreading_child_nodes.discard(node)
-        self.spreading_child_nodes_standard.discard(node)
-
-
     def spread(self, nbrs_dict, spreading_nodes, prob):
         infec_nodes = set()
         for spreading_node in spreading_nodes:
@@ -101,24 +93,30 @@ class Epsim:
         return infec_nodes
 
 
-    def immunize_family_nbrs(self, nodes, prob):
-        immunized_nodes = set()
+    def test_nodes(self, nodes, prob):
+        return {node for node in nodes if random.random() < prob}
+
+
+    def detect_nodes(self, nodes, prob):
+        return {node for node in nodes if random.random() < prob}
+
+
+    def quarantine_node(self, node):
+        self.quarantined[node] = 0
+        self.spreading_parent_nodes.discard(node)
+        self.spreading_child_nodes.discard(node)
+        self.spreading_child_nodes_standard.discard(node)
+
+
+    def quarantine_nodes_with_family(self, nodes):
+        quarantined_nodes = set()
         for node in nodes:
-            if random.random() < prob:
-                for nbr in self.family_nbrs[node]:
-                    self.immunize_node(nbr)
-                    immunized_nodes.add(nbr)
-        return immunized_nodes
-
-
-    def immunize_after_testing(self, spreading_nodes, prob):
-        pos_tested_nodes = set()
-        for spreading_node in spreading_nodes:
-            if random.random() < prob:
-                pos_tested_nodes.add(spreading_node)
-        for node in pos_tested_nodes:
-            self.immunize_node(node)
-        return pos_tested_nodes
+            self.quarantine_node(node)
+            quarantined_nodes.add(node)
+            for nbr in self.family_nbrs[node]:
+                self.quarantine_node(nbr)
+                quarantined_nodes.add(nbr)
+        return quarantined_nodes
 
 
     def run_sim(self, sim_iters, num_start_nodes, num_immunized_nodes, start_weekday, p_spread_family, p_spread_school, p_spread_office, p_detect_child, 
@@ -140,6 +138,7 @@ class Epsim:
         print_progress -- print simulation statistics every round onto the console
         export_csv -- export simulation statistics to a csv file
         """
+        # set starting node states
         for node in self.node_states:
             self.node_states[node] = 0
         
@@ -156,8 +155,9 @@ class Epsim:
         for node in random.sample(self.node_states.keys(), num_immunized_nodes):
             self.node_states[node] = 6
 
+        # print simulation info
         print(f"starting simulation with n={len(self.node_states)}, num_start_nodes={num_start_nodes}, num_immunized_nodes={num_immunized_nodes}, " \
-              + f"sim_iters={sim_iters}")
+              + f"start_weekday={start_weekday}, sim_iters={sim_iters}")
         print(f"p_spread_family={p_spread_family}, p_spread_school={p_spread_school}, p_spread_office={p_spread_office}, p_detect_child={p_detect_child}, " \
               + f"p_detect_parent={p_detect_parent}, p_testing={p_testing}")
         print(f"family_nbrs: {len(self.family_nbrs)}, school_nbrs_standard: {len(self.school_nbrs_standard)}, " \
@@ -166,67 +166,96 @@ class Epsim:
         if print_progress:
             print("the following information represents the number of nodes per round for:")
             print("round:  [state_0, state_1, state_2, state_3, state_4, state_5, state_6]" \
-                  + "  [infec_family, infec_school, infec_office, infec_children, infec_parents, immunized_detect, immunized_test]")
+                  + "  [infec_family, infec_school, infec_office, infec_children, infec_parents, quarantined_detect, quarantined_test]")
 
         num_infec_per_rnd = []
         states_per_rnd = []
         info_per_rnd = []
+        self.quarantined = {}
 
+        # run simulation
         for rnd in range(sim_iters):
             weekday = rnd + start_weekday % 7
+
+            # compute spreading nodes for this round
             self.infec_nodes = {node for node, state in self.node_states.items() if state in [1, 2, 3, 4, 5]}
-            self.spreading_parent_nodes = {node for node, state in self.node_states.items() if state in [4, 5] and node in self.office_nbrs}
-            self.spreading_child_nodes = {node for node, state in self.node_states.items() if state in [4, 5] and (
-                                          node in self.school_nbrs_standard \
-                                          or node in self.school_nbrs_split[0] \
-                                          or node in self.school_nbrs_split[1])}
+
+            self.spreading_parent_nodes = {node for node, state in self.node_states.items() if \
+                                           state in [4, 5] \
+                                           and node in self.office_nbrs}
+            self.spreading_child_nodes = {node for node, state in self.node_states.items() if \
+                                          state in [4, 5] \
+                                          and (
+                                            node in self.school_nbrs_standard \
+                                            or node in self.school_nbrs_split[0] \
+                                            or node in self.school_nbrs_split[1])}
             self.spreading_child_nodes_standard = {node for node in self.spreading_child_nodes if node in self.school_nbrs_standard}
 
+            # nodes in quarantine for 10 rounds get released
+            self.quarantined = {node: counter for (node, counter) in self.quarantined.items() if counter < 10}
+
+            # split between quarantined and non-quarantined spreading nodes
+            self.quarantined_spreading_parent_nodes = {node for node in self.quarantined if node in self.spreading_parent_nodes}
+            self.quarantined_spreading_child_nodes = {node for node in self.quarantined if node in self.spreading_child_nodes}
+            self.spreading_parent_nodes = {node for node in self.spreading_parent_nodes if node not in self.quarantined}
+            self.spreading_child_nodes = {node for node in self.spreading_child_nodes if node not in self.quarantined}
+            self.spreading_child_nodes_standard = {node for node in self.spreading_child_nodes_standard if node not in self.quarantined}
+
+            # spread the infection
+            # for quarantined nodes spread only in family
+            infec_family_children = self.spread(self.family_nbrs, self.quarantined_spreading_child_nodes, p_spread_family)
+            infec_family_parents = self.spread(self.family_nbrs, self.quarantined_spreading_parent_nodes, p_spread_family)
+
             # spread in family every day
-            infec_family_children = self.spread(self.family_nbrs, self.spreading_child_nodes, p_spread_family)
-            infec_family_parents = self.spread(self.family_nbrs, self.spreading_parent_nodes, p_spread_family)
+            infec_family_children = infec_family_children.union(self.spread(self.family_nbrs, self.spreading_child_nodes, p_spread_family))
+            infec_family_parents = infec_family_parents.union(self.spread(self.family_nbrs, self.spreading_parent_nodes, p_spread_family))
 
             # children are tested on monday morning and if they test positive, them and their families get quarantined
-            immunized_monday_test = set()
+            quarantined_monday_test = set()
             if weekday == 0:
-                pos_tested_child_nodes = self.immunize_after_testing(self.spreading_child_nodes, p_testing)
-                immunized_family_nbrs = self.immunize_family_nbrs(pos_tested_child_nodes, prob=1.0)
-                immunized_monday_test = pos_tested_child_nodes.union(immunized_family_nbrs)
+                pos_tested_children_monday = self.test_nodes(self.spreading_child_nodes, p_testing)
+                quarantined_monday_test = self.quarantine_nodes_with_family(pos_tested_children_monday)
 
             # on wednesday children in non-split classes get tested
-            immunized_wednesday_test = set()
+            quarantined_wednesday_test = set()
             if weekday == 2:
-                pos_tested_child_nodes = self.immunize_after_testing(self.spreading_child_nodes_standard, p_testing)
-                immunized_family_nbrs = self.immunize_family_nbrs(pos_tested_child_nodes, prob=1.0)
-                immunized_wednesday_test = pos_tested_child_nodes.union(immunized_family_nbrs) 
+                pos_tested_children_wednesday = self.test_nodes(self.spreading_child_nodes_standard, p_testing)
+                quarantined_wednesday_test = self.quarantine_nodes_with_family(pos_tested_children_wednesday)
 
             # spread in office and school only during weekdays
             infec_office = set()
+            quarantined_detect_office = set()
             infec_school_standard = set()
             infec_school_split = set()
-            immunized_detect_standard = set()
-            immunized_detect_split = set()
+            quarantined_detect_standard = set()
+            quarantined_detect_split = set()
             if weekday in [0, 1, 2, 3, 4]:
                 # spread in office
                 infec_office = self.spread(self.office_nbrs, self.spreading_parent_nodes, p_spread_office)
-                # with p_detect_parent an infection of a parent gets detected (shows symtoms) and its family gets quarantined
-                immunized_detect_office = self.immunize_family_nbrs(infec_office, p_detect_parent)
+                # with p_detect_parent an infection of a parent gets detected (shows symtoms) and it and its family gets quarantined
+                detect_office = self.detect_nodes(infec_office, p_detect_parent)
+                quarantined_detect_office = self.quarantine_nodes_with_family(detect_office)
 
                 # handle standard classes
                 if len(self.school_nbrs_standard) > 0:
                     infec_school_standard = self.spread(self.school_nbrs_standard, self.spreading_child_nodes, p_spread_school)
-                    # with p_detect_child an infection of a child gets detected (shows symtoms) and its family gets quarantined
-                    immunized_detect_standard = self.immunize_family_nbrs(infec_school_standard, p_detect_child)
+                    # with p_detect_child an infection of a child gets detected (shows symtoms) and it and its family gets quarantined
+                    detect_standard = self.detect_nodes(infec_school_standard, p_detect_child)
+                    quarantined_detect_standard = self.quarantine_nodes_with_family(detect_standard)
 
                 # handle alternating split classes
                 if len(self.school_nbrs_split[0]) > 0:
                     current_class = rnd % 2
                     infec_school_split = self.spread(self.school_nbrs_split[current_class], self.spreading_child_nodes, p_spread_school)
-                    immunized_detect_split = self.immunize_family_nbrs(infec_school_split, p_detect_child)
+                    detect_split = self.detect_nodes(infec_school_split, p_detect_child)
+                    quarantined_detect_split = self.quarantine_nodes_with_family(detect_split)
 
             # all infected nodes increase their state every round
             for infec_node in self.infec_nodes:
                 self.node_states[infec_node] += 1
+            # increase quarantine counter for every quarantined node
+            for quarantined_node in self.quarantined:
+                self.quarantined[quarantined_node] += 1
 
             # info tracking
             states_per_rnd.append([0] * num_node_states)
@@ -238,8 +267,8 @@ class Epsim:
                 'infec_office': len(infec_office),
                 'infec_children': len(infec_family_children) + len(infec_school_standard) + len(infec_school_split),
                 'infec_parents': len(infec_family_parents) + len(infec_office),
-                'immunized_detect': len(immunized_detect_office) + len(immunized_detect_standard) + len(immunized_detect_split),
-                'immunized_test': len(immunized_monday_test) + len(immunized_wednesday_test)})
+                'quarantined_detect': len(quarantined_detect_office) + len(quarantined_detect_standard) + len(quarantined_detect_split),
+                'quarantined_test': len(quarantined_monday_test) + len(quarantined_wednesday_test)})
             if print_progress:
                 print(f"{rnd}:\t{states_per_rnd[rnd]}\t{list(info_per_rnd[rnd].values())}")
 
