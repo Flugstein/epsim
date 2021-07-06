@@ -175,7 +175,7 @@ class Epsim:
 
         # run simulation
         for rnd in range(sim_iters):
-            weekday = rnd + start_weekday % 7
+            weekday = (rnd + start_weekday) % 7
 
             # compute spreading nodes for this round
             self.infec_nodes = {node for node, state in self.node_states.items() if state in [1, 2, 3, 4, 5]}

@@ -1,5 +1,5 @@
-# Epedemic Simulation
-Epedemic simulation modeling family, schools and offices
+# Epidemic Simulation
+Epidemic simulation modeling family, schools and offices
 
 ## Run
 - Generate graph with `gengraph.py`
