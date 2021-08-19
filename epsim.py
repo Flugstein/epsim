@@ -118,8 +118,18 @@ class Epsim:
                 quarantined_nodes.add(nbr)
         return quarantined_nodes
 
+    
+    def determine_clusters(self, nbrs_dict):
+        clusters = []
+        nodes_to_skip = set()
+        for node, nbrs in nbrs_dict.items():
+            if node not in nodes_to_skip:
+                clusters.append([node] + sorted(list(nbrs)))
+                nodes_to_skip.update(nbrs)
+        return clusters
 
-    def run_sim(self, sim_iters, num_start_nodes, num_immunized_nodes, start_weekday, p_spread_family, p_spread_school, p_spread_office, p_detect_child, 
+
+    def run_sim(self, sim_iters, num_start_nodes, perc_immunized_nodes, start_weekday, p_spread_family, p_spread_school, p_spread_office, p_detect_child, 
                 p_detect_parent, p_testing, print_progress=False, export_csv=False):
         """
         Run the epidemic simulation with the given parameters.
@@ -127,7 +137,9 @@ class Epsim:
         sim_iters -- number of iterations/rounds to simulate
         num_start_nodes -- number of initially infecteded nodes
                            can be a single value, where the nodes get disributed equally over all states, or a list with the exact number of nodes per state
-        num_immunized_nodes -- number of initially immunized nodes
+        perc_immunized_nodes -- percentage of initially immunized nodes
+                                can be a single value, where the nodes are randomly chosen, or a dict with the percentage of nodes per node class
+                                (families, parents, children)
         start_weekday -- weekday to start the simulation with (0: Monday, 1: Tuesday, ..., 6: Sunday)
         p_spread_family -- probability to spread the infection within the family
         p_spread_school -- probability to spread the infection within the school
@@ -138,25 +150,43 @@ class Epsim:
         print_progress -- print simulation statistics every round onto the console
         export_csv -- export simulation statistics to a csv file
         """
-        # set starting node states
         for node in self.node_states:
             self.node_states[node] = 0
+
+         # immunize nodes
+        if isinstance(perc_immunized_nodes, float):
+            for node in random.sample(self.node_states.keys(), int(perc_immunized_nodes * len(self.node_states))):
+                self.node_states[node] = 6
+        elif isinstance(perc_immunized_nodes, dict):
+            if 'families' in perc_immunized_nodes:
+                families = self.determine_clusters(self.family_nbrs)
+                for cluster in random.sample(families, int(perc_immunized_nodes['families'] * len(families))):
+                    for node in cluster:
+                        self.node_states[node] = 6
+            if 'parents' in perc_immunized_nodes:
+                parents = self.office_nbrs.keys()
+                for node in random.sample(parents, int(perc_immunized_nodes['parents'] * len(parents))):
+                    self.node_states[node] = 6
+            if 'children' in perc_immunized_nodes:
+                children = list(self.school_nbrs_standard.keys()) + list(self.school_nbrs_split[0].keys()) + list(self.school_nbrs_split[1].keys())
+                for node in random.sample(children, int(perc_immunized_nodes['children'] * len(children))):
+                    self.node_states[node] = 6
+        else:
+            raise ValueError("perc_immunized_nodes has wrong format")
         
+        # set starting nodes
         if isinstance(num_start_nodes, int):
             num_start_nodes = [int(num_start_nodes / 5)] * 5
         if not isinstance(num_start_nodes, list) and len(num_start_nodes) != num_node_states - 2:  # without not infected and immune states
             raise ValueError("num_start_nodes has wrong format")
-        sampled_nodes = random.sample(self.node_states.keys(), sum(num_start_nodes))
+        sampled_nodes = random.sample([node for node, state in self.node_states.items() if state == 0], sum(num_start_nodes))  # ensure starting and immunized nodes don't overlap
         start_nodes_per_state = [[sampled_nodes.pop() for i in range(num)] for num in num_start_nodes]
         for i, start_nodes in enumerate(start_nodes_per_state, 1):
             for node in start_nodes:
                 self.node_states[node] = i
 
-        for node in random.sample(self.node_states.keys(), num_immunized_nodes):
-            self.node_states[node] = 6
-
         # print simulation info
-        print(f"starting simulation with n={len(self.node_states)}, num_start_nodes={num_start_nodes}, num_immunized_nodes={num_immunized_nodes}, " \
+        print(f"starting simulation with n={len(self.node_states)}, num_start_nodes={num_start_nodes}, perc_immunized_nodes={perc_immunized_nodes}, " \
               + f"start_weekday={start_weekday}, sim_iters={sim_iters}")
         print(f"p_spread_family={p_spread_family}, p_spread_school={p_spread_school}, p_spread_office={p_spread_office}, p_detect_child={p_detect_child}, " \
               + f"p_detect_parent={p_detect_parent}, p_testing={p_testing}")
