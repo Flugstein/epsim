@@ -157,7 +157,9 @@ class Epsim:
         if isinstance(perc_immunized_nodes, float):
             for node in random.sample(self.node_states.keys(), int(perc_immunized_nodes * len(self.node_states))):
                 self.node_states[node] = 6
-        elif isinstance(perc_immunized_nodes, dict):
+        elif isinstance(perc_immunized_nodes, dict) or isinstance(perc_immunized_nodes, tuple):
+            if isinstance(perc_immunized_nodes, tuple):
+                perc_immunized_nodes = dict(perc_immunized_nodes)
             if 'families' in perc_immunized_nodes:
                 families = self.determine_clusters(self.family_nbrs)
                 for cluster in random.sample(families, int(perc_immunized_nodes['families'] * len(families))):
@@ -173,6 +175,8 @@ class Epsim:
                     self.node_states[node] = 6
         else:
             raise ValueError("perc_immunized_nodes has wrong format")
+
+        num_start_immunized = len([node for node, state in self.node_states.items() if state == 6])
         
         # set starting nodes
         if isinstance(num_start_nodes, int):
@@ -192,6 +196,7 @@ class Epsim:
               + f"p_detect_parent={p_detect_parent}, p_testing={p_testing}")
         print(f"family_nbrs: {len(self.family_nbrs)}, school_nbrs_standard: {len(self.school_nbrs_standard)}, " \
               + f"school_nbrs_split: {len(self.school_nbrs_split[0])} {len(self.school_nbrs_split[1])}, office_nbrs: {len(self.office_nbrs)}")
+        print(f"num_start_immunized={num_start_immunized}")
 
         if print_progress:
             print("the following information represents the number of nodes per round for:")
@@ -240,17 +245,11 @@ class Epsim:
             infec_family_children = infec_family_children.union(self.spread(self.family_nbrs, self.spreading_child_nodes, p_spread_family))
             infec_family_parents = infec_family_parents.union(self.spread(self.family_nbrs, self.spreading_parent_nodes, p_spread_family))
 
-            # children are tested on monday morning and if they test positive, them and their families get quarantined
-            quarantined_monday_test = set()
-            if weekday == 0:
-                pos_tested_children_monday = self.test_nodes(self.spreading_child_nodes, p_testing)
-                quarantined_monday_test = self.quarantine_nodes_with_family(pos_tested_children_monday)
-
-            # on wednesday children in non-split classes get tested
-            quarantined_wednesday_test = set()
-            if weekday == 2:
-                pos_tested_children_wednesday = self.test_nodes(self.spreading_child_nodes_standard, p_testing)
-                quarantined_wednesday_test = self.quarantine_nodes_with_family(pos_tested_children_wednesday)
+            # children are tested on monday, wednesday and friday and if they test positive, them and their families get quarantined
+            quarantined_test = set()
+            if weekday in [0, 2, 4]:
+                pos_tested_children = self.test_nodes(self.spreading_child_nodes, p_testing)
+                quarantined_test = self.quarantine_nodes_with_family(pos_tested_children)
 
             # spread in office and school only during weekdays
             infec_office = set()
@@ -298,14 +297,14 @@ class Epsim:
                 'infec_children': len(infec_family_children) + len(infec_school_standard) + len(infec_school_split),
                 'infec_parents': len(infec_family_parents) + len(infec_office),
                 'quarantined_detect': len(quarantined_detect_office) + len(quarantined_detect_standard) + len(quarantined_detect_split),
-                'quarantined_test': len(quarantined_monday_test) + len(quarantined_wednesday_test)})
+                'quarantined_test': len(quarantined_test)})
             if print_progress:
                 print(f"{rnd}:\t{states_per_rnd[rnd]}\t{list(info_per_rnd[rnd].values())}")
 
             num_infec = sum(states_per_rnd[rnd][1:])
             num_infec_per_rnd.append(num_infec)
 
-        print(f"infected nodes: {num_infec}\n")
+        print(f"total infected nodes: {num_infec - num_start_immunized}\n")
         if export_csv:
             self.write_csv(export_csv, states_per_rnd, info_per_rnd)
         return num_infec_per_rnd
