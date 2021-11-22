@@ -147,30 +147,42 @@ class Epsim:
         p_detect_child -- probability that an infected child gets detected and quarantined because of its symtoms
         p_detect_parent -- probability that an infected parent gets detected and quarantined because of its symtoms
         p_testing -- probability that a test detects an infected person
+                     dict of weekday (0 to 6) and test probability
         print_progress -- print simulation statistics every round onto the console
         export_csv -- export simulation statistics to a csv file
         """
+        print("initializing simulation")
+
         for node in self.node_states:
             self.node_states[node] = 0
 
-         # immunize nodes
+        # print graph statistics
+        children = list(self.school_nbrs_standard.keys()) + list(self.school_nbrs_split[0].keys()) + list(self.school_nbrs_split[1].keys())
+        print(f"children: {len(children)}")
+        parents = self.office_nbrs.keys()
+        print(f"parents: {len(parents)}")
+        families = self.determine_clusters(self.family_nbrs)
+        print(f"families: {len(families)}")
+
+        # input conversion
+        if isinstance(perc_immunized_nodes, tuple):
+            perc_immunized_nodes = dict(perc_immunized_nodes)
+        if isinstance(p_testing, tuple):
+            p_testing = dict(p_testing)
+
+        # immunize nodes
         if isinstance(perc_immunized_nodes, float):
             for node in random.sample(self.node_states.keys(), int(perc_immunized_nodes * len(self.node_states))):
                 self.node_states[node] = 6
-        elif isinstance(perc_immunized_nodes, dict) or isinstance(perc_immunized_nodes, tuple):
-            if isinstance(perc_immunized_nodes, tuple):
-                perc_immunized_nodes = dict(perc_immunized_nodes)
+        elif isinstance(perc_immunized_nodes, dict):
             if 'families' in perc_immunized_nodes:
-                families = self.determine_clusters(self.family_nbrs)
                 for cluster in random.sample(families, int(perc_immunized_nodes['families'] * len(families))):
                     for node in cluster:
                         self.node_states[node] = 6
             if 'parents' in perc_immunized_nodes:
-                parents = self.office_nbrs.keys()
                 for node in random.sample(parents, int(perc_immunized_nodes['parents'] * len(parents))):
                     self.node_states[node] = 6
             if 'children' in perc_immunized_nodes:
-                children = list(self.school_nbrs_standard.keys()) + list(self.school_nbrs_split[0].keys()) + list(self.school_nbrs_split[1].keys())
                 for node in random.sample(children, int(perc_immunized_nodes['children'] * len(children))):
                     self.node_states[node] = 6
         else:
@@ -247,8 +259,8 @@ class Epsim:
 
             # children are tested on monday, wednesday and friday and if they test positive, them and their families get quarantined
             quarantined_test = set()
-            if weekday in [0, 2, 4]:
-                pos_tested_children = self.test_nodes(self.spreading_child_nodes, p_testing)
+            if weekday in p_testing:
+                pos_tested_children = self.test_nodes(self.spreading_child_nodes, p_testing[weekday])
                 quarantined_test = self.quarantine_nodes_with_family(pos_tested_children)
 
             # spread in office and school only during weekdays
