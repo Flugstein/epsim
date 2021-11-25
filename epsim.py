@@ -63,25 +63,6 @@ class Epsim:
                 nbrs_dict[node] = nbrs
 
 
-    def write_csv(self, file_path, states_per_rnd, info_per_rnd):
-        with open(file_path, 'w') as f:
-            f.write("round")
-            for i in range(len(states_per_rnd[0])):
-                f.write(f",state_{i}")
-            for key in info_per_rnd[0].keys():
-                f.write(f",{key}")
-            f.write("\n")
-
-            for rnd, states in enumerate(states_per_rnd):
-                info = info_per_rnd[rnd]
-                f.write(f"{rnd}")
-                for state in states:
-                    f.write(f",{state}")
-                for val in info.values():
-                    f.write(f",{val}")
-                f.write("\n")
-
-
     def spread(self, nbrs_dict, spreading_nodes, prob):
         infected_nodes = set()
         for spreading_node in spreading_nodes:
@@ -141,7 +122,7 @@ class Epsim:
 
 
     def run_sim(self, sim_iters, num_start_nodes, perc_immune_nodes, start_weekday, p_spread_family, p_spread_school, p_spread_office, p_detect_child, 
-                p_detect_parent, p_testing, print_progress=False, export_csv=False):
+                p_detect_parent, p_testing, print_progress=False):
         """
         Run the epidemic simulation with the given parameters.
 
@@ -160,9 +141,7 @@ class Epsim:
         p_testing         -- probability that a test detects an infected person
                              dict of weekday (0 to 6) and test probability
         print_progress    -- print simulation statistics every round onto the console
-        export_csv        -- export simulation statistics to a csv file
         """
-        print("initializing simulation")
 
         # input conversion
         if isinstance(perc_immune_nodes, tuple):
@@ -208,6 +187,7 @@ class Epsim:
         for i, start_nodes in enumerate(start_nodes_per_state, 1):
             for node in start_nodes:
                 self.node_states[node] = i
+                self.nodes_clean.remove(node)
 
         # print simulation info
         print(f"starting simulation with n={n}, num_start_nodes={num_start_nodes}, perc_immune_nodes={perc_immune_nodes}, " \
@@ -217,41 +197,35 @@ class Epsim:
         print(f"family_nbrs: {len(self.family_nbrs)}, school_nbrs_standard: {len(self.school_nbrs_standard)}, " \
               + f"school_nbrs_split: {len(self.school_nbrs_split[0])} {len(self.school_nbrs_split[1])}, office_nbrs: {len(self.office_nbrs)}")
         print(f"start immune: {num_start_immune}")
-        print(f"children: {len(children)}")
-        print(f"parents: {len(parents)}")
-        print(f"families: {len(families)}")
 
         if print_progress:
             print("the following information represents the number of nodes per round for:")
-            print("round:  [state_0, state_1, state_2, state_3, state_4, state_5, state_6]" \
-                  + "  [infected_in_family, infected_in_school, infected_in_office, infected_by_children, infected_by_parents, quarantined_by_detection, quarantined_by_test]")
+            print("round: [state_0, state_1, state_2, state_3, state_4, state_5, state_6, " \
+                  + "infected, infected_in_family, infected_in_school, infected_in_office, infected_by_children, infected_by_parents, " \
+                  +"quarantined_by_detection, quarantined_by_test]")
 
         # initialize simulation variables
         num_state_infected_and_immune_per_rnd = []
-        states_per_rnd = []
         info_per_rnd = []
         self.quarantined = {}
-        total_infected_by_children = 0
-        total_infected_children = 0
-        total_infected_by_parents = 0
-        total_infected_parents = 0
 
         # run simulation
         for rnd in range(sim_iters):
             weekday = (rnd + start_weekday) % 7
 
-            # info tracking: number of nodes per state at beginning of day
-            states_per_rnd.append([0] * num_node_states)
-            states_per_rnd[rnd][0] = len(self.nodes_clean)
+            # info tracking: number of nodes per state at beginning of the day
+            num_nodes_per_state = [0] * num_node_states
+            num_nodes_per_state[0] = len(self.nodes_clean)
             for state in self.node_states.values():
-                states_per_rnd[rnd][state] += 1
-            states_per_rnd[rnd][6] = n - sum(states_per_rnd[rnd])
+                num_nodes_per_state[state] += 1
+            num_nodes_per_state[6] = n - sum(num_nodes_per_state)
 
             # compute spreading nodes for this round
             infected_state_nodes = {node for node, state in self.node_states.items() if state in [1, 2, 3, 4, 5]}
             self.spreading_nodes = {node for node, state in self.node_states.items() if state in [4, 5]}
             self.spreading_parent_nodes = self.spreading_nodes & self.office_nbrs.keys()
-            self.spreading_child_nodes = self.spreading_nodes & (self.school_nbrs_standard.keys() | self.school_nbrs_split[0].keys() | self.school_nbrs_split[1].keys())
+            self.spreading_child_nodes = self.spreading_nodes \
+                                         & (self.school_nbrs_standard.keys() | self.school_nbrs_split[0].keys() | self.school_nbrs_split[1].keys())
             self.spreading_child_nodes_standard = self.spreading_child_nodes & self.school_nbrs_standard.keys()
 
             ## nodes in quarantine for 10 rounds get released
@@ -312,33 +286,6 @@ class Epsim:
             infected_in_school = infeced_in_school_standard | infected_in_school_split
             quarantined_by_detection_in_school = quarantined_by_detection_in_school_standard | quarantined_by_detection_in_school_split
 
-            # info tracking: what happened during the day
-            infected_by_children = infected_in_family_by_children | infected_in_school
-            infected_by_parents = infected_in_family_by_parents | infected_in_office
-            infected = infected_by_children | infected_by_parents
-            quarantined_by_detection = quarantined_by_detection_in_office | quarantined_by_detection_in_school
-            infected_children = {node for node in infected if self.is_child_node(node)}
-            infected_parents = {node for node in infected if self.is_parent_node(node)}
-
-            total_infected_by_children += len(infected_by_children)
-            total_infected_children += len(infected_children)
-            total_infected_by_parents += len(infected_by_parents)
-            total_infected_parents += len(infected_parents)
-
-            info_per_rnd.append({
-                'infected_in_family': len(infected_in_family),
-                'infected_in_school': len(infected_in_school),
-                'infected_in_office': len(infected_in_office),
-                'infected_by_children': len(infected_by_children),
-                'infected_by_parents': len(infected_by_parents),
-                'quarantined_by_detection': len(quarantined_by_detection),
-                'quarantined_by_test': len(quarantined_by_test)})
-            if print_progress:
-                print(f"{rnd}:\t{states_per_rnd[rnd]}\t{list(info_per_rnd[rnd].values())}")
-
-            num_state_infected_and_immune = sum(states_per_rnd[rnd][1:])
-            num_state_infected_and_immune_per_rnd.append(num_state_infected_and_immune)
-
             # all infected nodes increase their state every round
             for node in infected_state_nodes:
                 self.node_states[node] += 1
@@ -349,12 +296,37 @@ class Epsim:
             for quarantined_node in self.quarantined:
                 self.quarantined[quarantined_node] += 1
 
-        print(f"total infected: {num_state_infected_and_immune - len(sampled_nodes) - num_start_immune}")
-        print(f"total infected by children: {total_infected_by_children}")
-        print(f"total infected children: {total_infected_children}")
-        print(f"total infected by parents: {total_infected_by_parents}")
-        print(f"total infected parents: {total_infected_parents}")
+            # info tracking: what happened during the day
+            infected_by_children = infected_in_family_by_children | infected_in_school
+            infected_by_parents = infected_in_family_by_parents | infected_in_office
+            infected = infected_by_children | infected_by_parents
+            quarantined_by_detection = quarantined_by_detection_in_office | quarantined_by_detection_in_school
+            infected_children = {node for node in infected if self.is_child_node(node)}
+            infected_parents = {node for node in infected if self.is_parent_node(node)}
+
+            info_per_rnd.append({
+                'state_0': num_nodes_per_state[0],
+                'state_1': num_nodes_per_state[1],
+                'state_2': num_nodes_per_state[2],
+                'state_3': num_nodes_per_state[3],
+                'state_4': num_nodes_per_state[4],
+                'state_5': num_nodes_per_state[5],
+                'state_6': num_nodes_per_state[6],
+                'infected': len(infected),
+                'infected_in_family': len(infected_in_family),
+                'infected_in_school': len(infected_in_school),
+                'infected_in_office': len(infected_in_office),
+                'infected_by_children': len(infected_by_children),
+                'infected_children': len(infected_children),
+                'infected_by_parents': len(infected_by_parents),
+                'infected_parents': len(infected_parents),
+                'quarantined_by_detection': len(quarantined_by_detection),
+                'quarantined_by_test': len(quarantined_by_test)})
+            if print_progress:
+                print(f"{rnd}:\t{list(info_per_rnd[rnd].values())}")
+
+        total_infected = info_per_rnd[-1]['state_1']+info_per_rnd[-1]['state_2']+info_per_rnd[-1]['state_3']+info_per_rnd[-1]['state_4'] \
+                         +info_per_rnd[-1]['state_5']+info_per_rnd[-1]['state_6']
+        print(f"infected: {total_infected}")
         print()
-        if export_csv:
-            self.write_csv(export_csv, states_per_rnd, info_per_rnd)
-        return num_state_infected_and_immune_per_rnd
+        return info_per_rnd

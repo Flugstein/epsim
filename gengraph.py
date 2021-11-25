@@ -12,7 +12,7 @@ def chunks(lst, n):
 
 
 class EpsimGraph:
-    def __init__(self, k, sigma_office, perc_split_classes):
+    def __init__(self, k, sigma_office, perc_split_classes, print_progress=False):
         """
         Generate a graph for epidemic simulation with the given parameters.
         
@@ -31,6 +31,7 @@ class EpsimGraph:
         self.school_nbrs_standard = {}
         self.school_nbrs_split = [] # list of 2 dicts
         self.office_nbrs = {}
+        self.print_progress = print_progress
 
         self.create_graph()
     
@@ -100,7 +101,7 @@ class EpsimGraph:
 
         new_family_nbrs = self.conv2new(self.family_nbrs, old2new)
         self.write_nbrs(new_family_nbrs, family_nbrs_path)
-        print("family_nbrs written")
+        print(f"{family_nbrs_path} written")
 
         if len(self.school_nbrs_standard) > 0:
             nbrs = self.conv2new(self.school_nbrs_standard, old2new)
@@ -117,12 +118,13 @@ class EpsimGraph:
 
         new_office_nbrs = self.conv2new(self.office_nbrs, old2new)
         self.write_nbrs(new_office_nbrs, office_nbrs_path)
-        print("office_nbrs nbrs written")
+        print(f"{office_nbrs_path} written")
 
 
     def create_graph(self):
         print(f"creating graph with k={self.k}, sigma_office={self.sigma_office}")
-        print("randomly cluster children and parent nodes, such that there are child-parent pairs")
+        if self.print_progress:
+            print("randomly cluster children and parent nodes, such that there are child-parent pairs")
         children2parents = list(self.parent_nodes)
         random.shuffle(children2parents)
         for child_node, parent_node in enumerate(children2parents):
@@ -130,7 +132,8 @@ class EpsimGraph:
             self.family_nbrs[parent_node] = {child_node}
 
         # parents: 1/2 no change, 1/4 merge 2 nodes, 1/8 merge 3 nodes, ...
-        print("parents: 1/2 no change, 1/4 merge 2, 1/8 merge 3, ...")
+        if self.print_progress:
+            print("parents: 1/2 no change, 1/4 merge 2, 1/8 merge 3, ...")
         parents_shuffle = list(self.parent_nodes)
         random.shuffle(parents_shuffle)
         parents_splits = []
@@ -150,7 +153,8 @@ class EpsimGraph:
             merge_size += 1
 
         # parents: duplicate every node
-        print("parents: duplicate")
+        if self.print_progress:
+            print("parents: duplicate")
         parent_nodes = self.parent_nodes.copy()
         for parent_node in parent_nodes:
             self.duplicate_parents(parent_node)
@@ -158,8 +162,9 @@ class EpsimGraph:
         # children: k/l^2 many l*l grids, randomly place l^2 nodes on grid, cluster 8-neighbourhood
         # perc_split_classes of grids (school classes) are divided into 2, with a sparser grid
         l = 5
-        print(f"children: {self.k}/{l}^2 many {l}*{l} grids, randomly place {l}^2 nodes on grid, cluster 8-nbrhood")
-        print(f"{self.perc_split_classes*100:.0f}% of grids (school classes) are divided into 2, with a sparser grid")
+        if self.print_progress:
+            print(f"children: {self.k}/{l}^2 many {l}*{l} grids, randomly place {l}^2 nodes on grid, cluster 8-nbrhood")
+            print(f"{self.perc_split_classes*100:.0f}% of grids (school classes) are divided into 2, with a sparser grid")
         children_shuffle = list(self.child_nodes)
         random.shuffle(children_shuffle)
         children_splits = list(chunks(children_shuffle, l*l))
@@ -210,12 +215,14 @@ class EpsimGraph:
         brkpnt = int(len(children_splits) * self.perc_split_classes)
         self.school_nbrs_split = [make_grid(x, children_splits[:brkpnt]) for x in {0,1}]
         self.school_nbrs_standard = make_grid(2, children_splits[brkpnt:])
-        print(f"{len(self.school_nbrs_split[0]) + len(self.school_nbrs_split[1])} children in split classes, " \
-              + f"{len(self.school_nbrs_standard)} children in standard classes ({len(children_shuffle)} total, break: {brkpnt})")
+        if self.print_progress:
+            print(f"{len(self.school_nbrs_split[0]) + len(self.school_nbrs_split[1])} children in split classes, " \
+                + f"{len(self.school_nbrs_standard)} children in standard classes ({len(children_shuffle)} total, break: {brkpnt})")
 
         # parents: cluster 1-sigma_office no change, sigma_office*1/2 cluster 2 nodes, sigma_office*1/4 cluster 3 nodes, 
         # sigma_office*1/8 cluster 4 nodes, sigma_office*1/8 cluster 5 nodes
-        print(f"parents: cluster 1-{self.sigma_office} no change, {self.sigma_office}*1/2 cluster 2, {self.sigma_office}*1/4 cluster 3, ...")
+        if self.print_progress:
+            print(f"parents: cluster 1-{self.sigma_office} no change, {self.sigma_office}*1/2 cluster 2, {self.sigma_office}*1/4 cluster 3, ...")
         parents_shuffle = list(self.parent_nodes)
         random.shuffle(parents_shuffle)
         parents_splits = []
@@ -248,4 +255,4 @@ class EpsimGraph:
                     self.office_nbrs[node] = nbrs
             cluster_size += 1
 
-        print("gaph generation finished\n")
+        print()
