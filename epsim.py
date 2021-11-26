@@ -122,7 +122,7 @@ class Epsim:
 
 
     def run_sim(self, sim_iters, num_start_nodes, perc_immune_nodes, start_weekday, p_spread_family, p_spread_school, p_spread_office, p_detect_child, 
-                p_detect_parent, p_testing, print_progress=False):
+                p_detect_parent, p_testing, split_stay_home=False, print_progress=False):
         """
         Run the epidemic simulation with the given parameters.
 
@@ -140,6 +140,7 @@ class Epsim:
         p_detect_parent   -- probability that an infected parent gets detected and quarantined because of its symtoms
         p_testing         -- probability that a test detects an infected person
                              dict of weekday (0 to 6) and test probability
+        split_stay_home   -- True: the two halfs of split classes don't alternate, but one half always stays home
         print_progress    -- print simulation statistics every round onto the console
         """
 
@@ -278,8 +279,11 @@ class Epsim:
 
                 # handle alternating split classes
                 if len(self.school_nbrs_split[0]) > 0:
-                    current_class = rnd % 2
-                    infected_in_school_split = self.spread(self.school_nbrs_split[current_class], self.spreading_child_nodes, p_spread_school)
+                    if split_stay_home:
+                        current_half = 0  # half 0 always goes to school, while half 1 stays home
+                    else:
+                        current_half = rnd % 2  # alternate halfs of class
+                    infected_in_school_split = self.spread(self.school_nbrs_split[current_half], self.spreading_child_nodes, p_spread_school)
                     detected_in_school_split = self.detect_nodes(infected_in_school_split, p_detect_child)
                     quarantined_by_detection_in_school_split = self.quarantine_nodes_with_family(detected_in_school_split)
 
