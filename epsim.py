@@ -3,16 +3,6 @@ import random
 import math
 from pathlib import Path
 
-### node states ###
-# 0 not infected
-# 1 infected: incubation
-# 2 infected: incubation
-# 3 infected: incubation
-# 4 infected: spreading
-# 5 infected: spreading
-# 6 immune
-num_node_states = 7
-
 
 def chunks(lst, n):
     """Yield successive n-sized chunks from lst"""
@@ -22,8 +12,7 @@ def chunks(lst, n):
 
 class Epsim:
     def __init__(self):
-        self.nodes_clean = set()
-        self.node_states = {}
+        self.nodes_in_state = []
         self.family_nbrs = {}
         self.school_nbrs_standard = {}
         self.school_nbrs_split = [{}, {}]
@@ -35,14 +24,12 @@ class Epsim:
         self.school_nbrs_standard = school_nbrs_standard
         self.school_nbrs_split = school_nbrs_split
         self.office_nbrs = office_nbrs
-        self.nodes_clean = {node for node in family_nbrs.keys()}
 
 
     def init_from_files(self, family_nbrs_path, school_standard_path, school_split_0_path, school_split_1_path, office_nbrs_path):
         print('read nbrs files')
         self.read_nbrs_file(self.family_nbrs, family_nbrs_path)
         self.read_nbrs_file(self.office_nbrs, office_nbrs_path)
-        self.nodes_clean = {node for node in self.family_nbrs.keys()}
 
         if school_standard_path:
             self.read_nbrs_file(self.school_nbrs_standard, school_standard_path)
@@ -68,10 +55,9 @@ class Epsim:
         for spreading_node in spreading_nodes:
             if spreading_node in nbrs_dict:
                 for nbr in nbrs_dict[spreading_node]:
-                    if nbr in self.nodes_clean:
+                    if nbr in self.nodes_in_state[0]:
                         if random.random() < prob:
-                            self.node_states[nbr] = 1
-                            self.nodes_clean.remove(nbr)
+                            self.nodes_in_state[0].remove(nbr)
                             infected_nodes.add(nbr)
         return infected_nodes
 
@@ -122,7 +108,7 @@ class Epsim:
 
 
     def run_sim(self, sim_iters, num_start_nodes, perc_immune_nodes, start_weekday, p_spread_family, p_spread_school, p_spread_office, p_detect_child, 
-                p_detect_parent, p_testing, split_stay_home=False, print_progress=False):
+                p_detect_parent, testing, omicron=False, split_stay_home=False, print_progress=False):
         """
         Run the epidemic simulation with the given parameters.
 
@@ -138,8 +124,9 @@ class Epsim:
         p_spread_office   -- probability to spread the infection within the office
         p_detect_child    -- probability that an infected child gets detected and quarantined because of its symtoms
         p_detect_parent   -- probability that an infected parent gets detected and quarantined because of its symtoms
-        p_testing         -- probability that a test detects an infected person
-                             dict of weekday (0 to 6) and test probability
+        testing           -- dict of type of test with probability that a test detects an infected person and weekday it is taken
+                             example: testing={'pcr': {'p': 0.95, 'weekdays': [2]}, 'antigen': {'p': 0.5, 'weekdays': [0, 4]}}
+        omicron           -- enable omicron variant (lower incubation time)
         split_stay_home   -- True: the two halfs of split classes don't alternate, but one half always stays home
         print_progress    -- print simulation statistics every round onto the console
         """
@@ -147,62 +134,76 @@ class Epsim:
         # input conversion
         if isinstance(perc_immune_nodes, tuple):
             perc_immune_nodes = dict(perc_immune_nodes)
-        if isinstance(p_testing, tuple):
-            p_testing = dict(p_testing)
+        if isinstance(testing, tuple):
+            testing = dict(testing)
+            for key, value in testing.items():
+                testing[key] = dict(value)
 
-        n = len(self.nodes_clean)
+        self.nodes_in_state = []
+        self.nodes_in_state.append({node for node in self.family_nbrs.keys()})
+        n = len(self.nodes_in_state[0])
+
+        ## node states
+        if omicron:
+            num_node_states = 4
+            states_incubation = {}
+            states_spreading = {1, 2}
+        else:
+            num_node_states = 7
+            states_incubation = {1, 2, 3}
+            states_spreading = {4, 5}
+
+        for i in range(1, num_node_states - 1):
+            self.nodes_in_state.append(set())
 
         ## set immune nodes
         children = list(self.school_nbrs_standard.keys()) + list(self.school_nbrs_split[0].keys()) + list(self.school_nbrs_split[1].keys())
         parents = self.office_nbrs.keys()
         families = self.determine_clusters(self.family_nbrs)
         if isinstance(perc_immune_nodes, float):
-            for node in random.sample(self.nodes_clean, int(perc_immune_nodes * n)):
-                self.nodes_clean.remove(node)
+            for node in random.sample(self.nodes_in_state[0], int(perc_immune_nodes * n)):
+                self.nodes_in_state[0].remove(node)
         elif isinstance(perc_immune_nodes, dict):
             if 'families' in perc_immune_nodes:
                 immune_families = random.sample(families, int(perc_immune_nodes['families'] * len(families)))
                 for cluster in immune_families:
                     for node in cluster:
-                        self.nodes_clean.remove(node)
+                        self.nodes_in_state[0].remove(node)
             if 'parents' in perc_immune_nodes:
                 immune_parents = random.sample(parents, int(perc_immune_nodes['parents'] * len(parents)))
                 for node in immune_parents:
-                    self.nodes_clean.remove(node)
+                    self.nodes_in_state[0].remove(node)
             if 'children' in perc_immune_nodes:
                 immune_children = random.sample(children, int(perc_immune_nodes['children'] * len(children)))
                 for node in immune_children:
-                    self.nodes_clean.remove(node)
+                    self.nodes_in_state[0].remove(node)
         else:
             raise ValueError("perc_immune_nodes has wrong format")
 
-        num_start_immune = n - len(self.nodes_clean)
+        num_start_immune = n - len(self.nodes_in_state[0])
         
         ## set starting nodes
         if isinstance(num_start_nodes, int):
-            num_start_nodes = [int(num_start_nodes / 5)] * 5
+            num_start_nodes = [int(num_start_nodes / (num_node_states - 2))] * (num_node_states - 2)
         if not isinstance(num_start_nodes, list) and len(num_start_nodes) != num_node_states - 2:  # without not infected and immune states
             raise ValueError("num_start_nodes has wrong format")
-        sampled_nodes = random.sample(self.nodes_clean, sum(num_start_nodes))
-        start_nodes_per_state = [[sampled_nodes.pop() for i in range(num)] for num in num_start_nodes]
-        for i, start_nodes in enumerate(start_nodes_per_state, 1):
-            for node in start_nodes:
-                self.node_states[node] = i
-                self.nodes_clean.remove(node)
+        for s, num_nodes in enumerate(num_start_nodes, 1):
+            for node in random.sample(self.nodes_in_state[0], num_nodes):
+                self.nodes_in_state[0].remove(node)
+                self.nodes_in_state[s].add(node)
 
         # print simulation info
         print(f"starting simulation with n={n}, num_start_nodes={num_start_nodes}, perc_immune_nodes={perc_immune_nodes}, " \
-              + f"start_weekday={start_weekday}, sim_iters={sim_iters}")
-        print(f"p_spread_family={p_spread_family}, p_spread_school={p_spread_school}, p_spread_office={p_spread_office}, p_detect_child={p_detect_child}, " \
-              + f"p_detect_parent={p_detect_parent}, p_testing={p_testing}")
+              + f"start_weekday={start_weekday}, sim_iters={sim_iters}" + f"p_spread_family={p_spread_family}, p_spread_school={p_spread_school}," \
+              + f"p_spread_office={p_spread_office}, p_detect_child={p_detect_child}, " \
+              + f"p_detect_parent={p_detect_parent}, testing={testing}")
         print(f"family_nbrs: {len(self.family_nbrs)}, school_nbrs_standard: {len(self.school_nbrs_standard)}, " \
               + f"school_nbrs_split: {len(self.school_nbrs_split[0])} {len(self.school_nbrs_split[1])}, office_nbrs: {len(self.office_nbrs)}")
         print(f"start immune: {num_start_immune}")
 
         if print_progress:
             print("the following information represents the number of nodes per round for:")
-            print("round: [state_0, state_1, state_2, state_3, state_4, state_5, state_6, " \
-                  + "infected, infected_in_family, infected_in_school, infected_in_office, infected_by_children, infected_by_parents, " \
+            print("[(states), infected, infected_in_family, infected_in_school, infected_in_office, infected_by_children, infected_by_parents, " \
                   +"quarantined_by_detection, quarantined_by_test]")
 
         # initialize simulation variables
@@ -215,15 +216,13 @@ class Epsim:
             weekday = (rnd + start_weekday) % 7
 
             # info tracking: number of nodes per state at beginning of the day
-            num_nodes_per_state = [0] * num_node_states
-            num_nodes_per_state[0] = len(self.nodes_clean)
-            for state in self.node_states.values():
-                num_nodes_per_state[state] += 1
-            num_nodes_per_state[6] = n - sum(num_nodes_per_state)
+            num_nodes_per_state = [len(nodes) for nodes in self.nodes_in_state]
+            num_nodes_per_state.append(n - sum(num_nodes_per_state))
 
             # compute spreading nodes for this round
-            infected_state_nodes = {node for node, state in self.node_states.items() if state in [1, 2, 3, 4, 5]}
-            self.spreading_nodes = {node for node, state in self.node_states.items() if state in [4, 5]}
+            self.spreading_nodes = set()
+            for s in states_spreading:
+                self.spreading_nodes |= self.nodes_in_state[s]
             self.spreading_parent_nodes = self.spreading_nodes & self.office_nbrs.keys()
             self.spreading_child_nodes = self.spreading_nodes \
                                          & (self.school_nbrs_standard.keys() | self.school_nbrs_split[0].keys() | self.school_nbrs_split[1].keys())
@@ -251,9 +250,13 @@ class Epsim:
 
             ## test children on monday, wednesday and friday and if they test positive, them and their families get quarantined
             quarantined_by_test = set()
-            if weekday in p_testing:
-                pos_tested_children = self.test_nodes(self.spreading_child_nodes, p_testing[weekday])
-                quarantined_by_test = self.quarantine_nodes_with_family(pos_tested_children)
+            for testing_type, testing_params in testing.items():
+                if weekday in testing_params['weekdays']:
+                    if omicron and testing_type == 'pcr':
+                        pos_tested_children = self.test_nodes(self.spreading_child_nodes & self.nodes_in_state[2], testing_params['p'])
+                    else:
+                        pos_tested_children = self.test_nodes(self.spreading_child_nodes, testing_params['p'])
+                    quarantined_by_test = self.quarantine_nodes_with_family(pos_tested_children)
 
             ## spread in office only during weekdays
             infected_in_office = set()
@@ -290,17 +293,6 @@ class Epsim:
             infected_in_school = infeced_in_school_standard | infected_in_school_split
             quarantined_by_detection_in_school = quarantined_by_detection_in_school_standard | quarantined_by_detection_in_school_split
 
-            # all infected nodes increase their state every round
-            for node in infected_state_nodes:
-                self.node_states[node] += 1
-                if self.node_states[node] == 6:
-                    self.node_states.pop(node)
-                
-            # increase quarantine counter for every quarantined node
-            for quarantined_node in self.quarantined:
-                self.quarantined[quarantined_node] += 1
-
-            # info tracking: what happened during the day
             infected_by_children = infected_in_family_by_children | infected_in_school
             infected_by_parents = infected_in_family_by_parents | infected_in_office
             infected = infected_by_children | infected_by_parents
@@ -308,14 +300,18 @@ class Epsim:
             infected_children = {node for node in infected if self.is_child_node(node)}
             infected_parents = {node for node in infected if self.is_parent_node(node)}
 
-            info_per_rnd.append({
-                'state_0': num_nodes_per_state[0],
-                'state_1': num_nodes_per_state[1],
-                'state_2': num_nodes_per_state[2],
-                'state_3': num_nodes_per_state[3],
-                'state_4': num_nodes_per_state[4],
-                'state_5': num_nodes_per_state[5],
-                'state_6': num_nodes_per_state[6],
+            # all infected nodes increase their state every round, nodes in final state get removed
+            for s in reversed(range(2, len(self.nodes_in_state))):
+                self.nodes_in_state[s] = self.nodes_in_state[s - 1]
+            self.nodes_in_state[1] = infected
+
+            # increase quarantine counter for every quarantined node
+            for quarantined_node in self.quarantined:
+                self.quarantined[quarantined_node] += 1
+
+            # info tracking: what happened during the day
+            info = {
+                'states': tuple(num_nodes_per_state[s] for s in range(num_node_states)),
                 'infected': len(infected),
                 'infected_in_family': len(infected_in_family),
                 'infected_in_school': len(infected_in_school),
@@ -325,12 +321,13 @@ class Epsim:
                 'infected_by_parents': len(infected_by_parents),
                 'infected_parents': len(infected_parents),
                 'quarantined_by_detection': len(quarantined_by_detection),
-                'quarantined_by_test': len(quarantined_by_test)})
+                'quarantined_by_test': len(quarantined_by_test)
+            }
+            info_per_rnd.append(info)
             if print_progress:
-                print(f"{rnd}:\t{list(info_per_rnd[rnd].values())}")
+                print(f"{rnd}:\t{list(info.values())}")
 
-        total_infected = info_per_rnd[-1]['state_1']+info_per_rnd[-1]['state_2']+info_per_rnd[-1]['state_3']+info_per_rnd[-1]['state_4'] \
-                         +info_per_rnd[-1]['state_5']+info_per_rnd[-1]['state_6']
+        total_infected = sum(info_per_rnd[-1]['states'][1:])
         print(f"infected: {total_infected}")
         print()
         return info_per_rnd
