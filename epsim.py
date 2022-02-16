@@ -1,8 +1,14 @@
 import sys
 import random
 import math
+import numpy as np
 from pathlib import Path
 
+loc_types = ['park','leisure','shopping', 'supermarket']
+avg_visit_times = {'park': 90, 'leisure': 60, 'shopping': 60, 'supermarket': 60}  # average time spent per visit
+contact_rate_multipliers = {'park': 0.25, 'leisure': 0.25, 'shopping': 0.25, 'supermarket': 0.25}
+need_minutes = {'park': 74, 'leisure': 600, 'shopping': 98, 'supermarket': 60}  # personal needs in minutes per week
+infection_rate = 0.07
 
 def chunks(lst, n):
     """Yield successive n-sized chunks from lst"""
@@ -10,44 +16,106 @@ def chunks(lst, n):
         yield lst[i:i + n]
 
 
+class Location:
+    def __init__(self, loc_id, loc_type, x, y, sqm):
+        self.loc_id = loc_id
+        self.loc_type = loc_type
+        self.x = x
+        self.y = y
+        self.sqm = sqm
+        self.infec_minutes = 0
+
+        if loc_type == 'park':
+            self.sqm *= 10 # https://www.medrxiv.org/content/10.1101/2020.02.28.20029272v2 (I took a factor of 10 instead of 19 due to the large error bars)
+        
+        self.visits = []
+        self.avg_visit_time = avg_visit_times[loc_type]
+
+
+    def register_visit(self, e, node_id):
+        visit_time = self.avg_visit_time
+        visit_prob = 0.0
+        if visit_time > 0.0:
+            visit_prob = need_minutes[self.loc_type] / (visit_time * 7) # = minutes per week / (average visit time * days in the week)
+        else:
+            return
+
+        if random.random() < visit_prob:
+            if node_id in e.quarantined.keys():
+                return
+            if node_id in e.nodes_in_state[0]:
+                self.visits.append((node_id, visit_time))
+                return
+            spreading_node = False
+            for s in e.states_spreading:
+                spreading_node |= node_id in e.nodes_in_state[s]
+            if spreading_node:
+                self.infec_minutes += visit_time
+                return
+
+
+    def spread(self, e):
+        minutes_opened = 12*60
+
+        base_rate = contact_rate_multipliers[self.loc_type] * (infection_rate / 360.0) * (1.0 / minutes_opened) * (self.infec_minutes / self.sqm)
+        # For Covid-19 this should be 0.07 (infection rate) for 1 infectious person, and 1 susceptible person within 2m for a full day.
+        # I assume they can do this in a 4m^2 area.
+        # So 0.07 = x * (24*60/24*60) * (24*60/4) -> 0.07 = x * 360 -> x = 0.07/360 = 0.0002
+        # "1.0" is a place holder for v[1] (visited minutes).
+
+        infected_nodes = set()
+        for visit in self.visits:
+            node = visit[0]
+            if node in e.nodes_in_state[0]:
+                infec_prob = visit[1] * base_rate
+            if random.random() < infec_prob:
+                e.nodes_in_state[0].remove(node)
+                infected_nodes.add(node)
+        
+        # clear for next round
+        self.visits = []
+        self.infec_minutes = 0
+        return infected_nodes
+
+
 class Epsim:
-    def __init__(self):
+    def __init__(self, family_nbrs, school_nbrs_standard, school_nbrs_split, office_nbrs):
         self.nodes_in_state = []
-        self.family_nbrs = {}
-        self.school_nbrs_standard = {}
-        self.school_nbrs_split = [{}, {}]
-        self.office_nbrs = {}
-
-
-    def init_from_dicts(self, family_nbrs, school_nbrs_standard, school_nbrs_split, office_nbrs):
         self.family_nbrs = family_nbrs
         self.school_nbrs_standard = school_nbrs_standard
         self.school_nbrs_split = school_nbrs_split
         self.office_nbrs = office_nbrs
+        self.families = self.determine_clusters(self.family_nbrs)
+        self.family_locs = []
+        self.locations = {loc_type:[] for loc_type in loc_types}
+        self.nearest_locs = [{} for family in self.families]  # nearest location of location type of family
+
+    
+    def add_location(self, loc_id, loc_type, x, y, sqm):
+        loc = Location(loc_id, loc_type, x, y, sqm)
+        if loc_type in self.locations.keys():
+            self.locations[loc_type].append(loc)
+        else:
+            print(f"Error, wrong location type '{loc_type}'")
 
 
-    def init_from_files(self, family_nbrs_path, school_standard_path, school_split_0_path, school_split_1_path, office_nbrs_path):
-        print('read nbrs files')
-        self.read_nbrs_file(self.family_nbrs, family_nbrs_path)
-        self.read_nbrs_file(self.office_nbrs, office_nbrs_path)
-
-        if school_standard_path:
-            self.read_nbrs_file(self.school_nbrs_standard, school_standard_path)
-        if school_split_0_path:
-            self.school_nbrs_split = []
-            for p in (school_split_0_path, school_split_1_path):
-                cur = {}
-                self.read_nbrs_file(cur, p)
-                self.school_nbrs_split.append(cur)
+    def calc_dist(self, x1, y1, x2, y2):
+        return (np.abs(x1-x2)**2 + np.abs(y1-y2)**2)**0.5
 
 
-    def read_nbrs_file(self, nbrs_dict, nbrs_file_path):
-        with open(nbrs_file_path) as f:
-            for line in f:
-                node, nbrs = line.split(':')
-                node = int(node)
-                nbrs = set(map(int, nbrs.split()))
-                nbrs_dict[node] = nbrs
+    def calc_dist_cheap(self, x1, y1, x2, y2):
+        return np.abs(x1-x2) + np.abs(y1-y2)
+
+
+    def update_nearest_locs(self):
+        for i, family_loc in enumerate(self.family_locs):
+            for loc_type, locs in self.locations.items():
+                min_dist = 99999.0
+                for loc in locs:
+                    d = self.calc_dist_cheap(family_loc[0], family_loc[1], loc.x, loc.y)
+                    if d < min_dist:
+                        min_dist = d
+                        self.nearest_locs[i][loc_type] = loc
 
 
     def spread(self, nbrs_dict, spreading_nodes, prob):
@@ -143,29 +211,28 @@ class Epsim:
         self.nodes_in_state.append({node for node in self.family_nbrs.keys()})
         n = len(self.nodes_in_state[0])
 
-        ## node states
+        # node states
         if omicron:
-            num_node_states = 4
-            states_incubation = {}
-            states_spreading = {1, 2}
+            self.num_node_states = 4
+            self.states_incubation = {}
+            self.states_spreading = {1, 2}
         else:
-            num_node_states = 7
-            states_incubation = {1, 2, 3}
-            states_spreading = {4, 5}
+            self.num_node_states = 7
+            self.states_incubation = {1, 2, 3}
+            self.states_spreading = {4, 5}
 
-        for i in range(1, num_node_states - 1):
+        for i in range(1, self.num_node_states - 1):
             self.nodes_in_state.append(set())
 
-        ## set immune nodes
+        # set immune nodes
         children = list(self.school_nbrs_standard.keys()) + list(self.school_nbrs_split[0].keys()) + list(self.school_nbrs_split[1].keys())
-        parents = self.office_nbrs.keys()
-        families = self.determine_clusters(self.family_nbrs)
+        parents = list(self.office_nbrs.keys())
         if isinstance(perc_immune_nodes, float):
             for node in random.sample(self.nodes_in_state[0], int(perc_immune_nodes * n)):
                 self.nodes_in_state[0].remove(node)
         elif isinstance(perc_immune_nodes, dict):
             if 'families' in perc_immune_nodes:
-                immune_families = random.sample(families, int(perc_immune_nodes['families'] * len(families)))
+                immune_families = random.sample(self.families, int(perc_immune_nodes['families'] * len(self.families)))
                 for cluster in immune_families:
                     for node in cluster:
                         self.nodes_in_state[0].remove(node)
@@ -182,10 +249,10 @@ class Epsim:
 
         num_start_immune = n - len(self.nodes_in_state[0])
         
-        ## set starting nodes
+        # set starting nodes
         if isinstance(num_start_nodes, int):
-            num_start_nodes = [int(num_start_nodes / (num_node_states - 2))] * (num_node_states - 2)
-        if not isinstance(num_start_nodes, list) and len(num_start_nodes) != num_node_states - 2:  # without not infected and immune states
+            num_start_nodes = [int(num_start_nodes / (self.num_node_states - 2))] * (self.num_node_states - 2)
+        if not isinstance(num_start_nodes, list) and len(num_start_nodes) != self.num_node_states - 2:  # without not infected and immune states
             raise ValueError("num_start_nodes has wrong format")
         for s, num_nodes in enumerate(num_start_nodes, 1):
             for node in random.sample(self.nodes_in_state[0], num_nodes):
@@ -221,17 +288,17 @@ class Epsim:
 
             # compute spreading nodes for this round
             self.spreading_nodes = set()
-            for s in states_spreading:
+            for s in self.states_spreading:
                 self.spreading_nodes |= self.nodes_in_state[s]
             self.spreading_parent_nodes = self.spreading_nodes & self.office_nbrs.keys()
             self.spreading_child_nodes = self.spreading_nodes \
                                          & (self.school_nbrs_standard.keys() | self.school_nbrs_split[0].keys() | self.school_nbrs_split[1].keys())
             self.spreading_child_nodes_standard = self.spreading_child_nodes & self.school_nbrs_standard.keys()
 
-            ## nodes in quarantine for 10 rounds get released
+            # nodes in quarantine for 10 rounds get released
             self.quarantined = {node: counter for (node, counter) in self.quarantined.items() if counter < 10}
 
-            ## split between quarantined and non-quarantined spreading nodes
+            # split between quarantined and non-quarantined spreading nodes
             self.quarantined_spreading_parent_nodes = self.quarantined.keys() & self.spreading_parent_nodes
             self.quarantined_spreading_child_nodes = self.quarantined.keys() & self.spreading_child_nodes
             self.spreading_parent_nodes = self.spreading_parent_nodes - self.quarantined.keys()
@@ -239,7 +306,7 @@ class Epsim:
             self.spreading_child_nodes_standard = self.spreading_child_nodes_standard - self.quarantined.keys()
 
             # spreading, testing and detection
-            ## spread in family (quarantined nodes only spread in family)
+            # spread in family (quarantined nodes only spread in family)
             infected_in_family_by_children = self.spread(self.family_nbrs, self.quarantined_spreading_child_nodes, p_spread_family)
             infected_in_family_by_parents = self.spread(self.family_nbrs, self.quarantined_spreading_parent_nodes, p_spread_family)
 
@@ -248,7 +315,7 @@ class Epsim:
 
             infected_in_family = infected_in_family_by_children | infected_in_family_by_parents
 
-            ## test children on monday, wednesday and friday and if they test positive, them and their families get quarantined
+            # test children on monday, wednesday and friday and if they test positive, them and their families get quarantined
             quarantined_by_test = set()
             for testing_type, testing_params in testing.items():
                 if weekday in testing_params['weekdays']:
@@ -258,7 +325,7 @@ class Epsim:
                         pos_tested_children = self.test_nodes(self.spreading_child_nodes, testing_params['p'])
                     quarantined_by_test = self.quarantine_nodes_with_family(pos_tested_children)
 
-            ## spread in office only during weekdays
+            # spread in office only during weekdays
             infected_in_office = set()
             quarantined_by_detection_in_office = set()
             if weekday in [0, 1, 2, 3, 4]:
@@ -267,7 +334,7 @@ class Epsim:
                 detected_in_office = self.detect_nodes(infected_in_office, p_detect_parent)
                 quarantined_by_detection_in_office = self.quarantine_nodes_with_family(detected_in_office)
 
-            ## spread in school only during weekdays
+            # spread in school only during weekdays
             infeced_in_school_standard = set()
             infected_in_school_split = set()
             quarantined_by_detection_in_school_standard = set()
@@ -293,9 +360,24 @@ class Epsim:
             infected_in_school = infeced_in_school_standard | infected_in_school_split
             quarantined_by_detection_in_school = quarantined_by_detection_in_school_standard | quarantined_by_detection_in_school_split
 
-            infected_by_children = infected_in_family_by_children | infected_in_school
-            infected_by_parents = infected_in_family_by_parents | infected_in_office
+            # register visits
+            for i, family in enumerate(self.families):
+                for loc_type, loc in self.nearest_locs[i].items():
+                    for node in family:
+                        loc.register_visit(self, node)
+
+            # spread in locations
+            infected_in_location = {}
+            for loc_type, locs in self.locations.items():
+                infected_in_location[loc_type] = set()
+                for loc in locs:
+                    infected_in_location[loc_type] |= loc.spread(self)
+
+            infected_by_children = infected_in_family_by_children | infected_in_school  # does not count infections in locations
+            infected_by_parents = infected_in_family_by_parents | infected_in_office  # does not count infections in locations
             infected = infected_by_children | infected_by_parents
+            for loc_type, infec_in_loc in infected_in_location.items():
+                infected |= infec_in_loc
             quarantined_by_detection = quarantined_by_detection_in_office | quarantined_by_detection_in_school
             infected_children = {node for node in infected if self.is_child_node(node)}
             infected_parents = {node for node in infected if self.is_parent_node(node)}
@@ -311,7 +393,7 @@ class Epsim:
 
             # info tracking: what happened during the day
             info = {
-                'states': tuple(num_nodes_per_state[s] for s in range(num_node_states)),
+                'states': tuple(num_nodes_per_state[s] for s in range(self.num_node_states)),
                 'infected': len(infected),
                 'infected_in_family': len(infected_in_family),
                 'infected_in_school': len(infected_in_school),
@@ -321,7 +403,9 @@ class Epsim:
                 'infected_by_parents': len(infected_by_parents),
                 'infected_parents': len(infected_parents),
                 'quarantined_by_detection': len(quarantined_by_detection),
-                'quarantined_by_test': len(quarantined_by_test)
+                'quarantined_by_test': len(quarantined_by_test),
+                #'infected_in_location': tuple({loc_type: len(infec_in_loc) for loc_type, infec_in_loc in infected_in_location.items()})
+                'infected_in_location': sum(len(infec_in_loc) for loc_type, infec_in_loc in infected_in_location.items())
             }
             info_per_rnd.append(info)
             if print_progress:
