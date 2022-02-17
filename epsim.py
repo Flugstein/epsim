@@ -1,10 +1,8 @@
 import sys
 import random
 import math
-import numpy as np
 from pathlib import Path
 
-loc_types = ['park','leisure','shopping', 'supermarket']
 avg_visit_times = {'park': 90, 'leisure': 60, 'shopping': 60, 'supermarket': 60}  # average time spent per visit
 contact_rate_multipliers = {'park': 0.25, 'leisure': 0.25, 'shopping': 0.25, 'supermarket': 0.25}
 need_minutes = {'park': 74, 'leisure': 600, 'shopping': 98, 'supermarket': 60}  # personal needs in minutes per week
@@ -17,40 +15,33 @@ def chunks(lst, n):
 
 
 class Location:
-    def __init__(self, loc_id, loc_type, x, y, sqm):
-        self.loc_id = loc_id
+    def __init__(self, loc_type, x, y, sqm):
         self.loc_type = loc_type
         self.x = x
         self.y = y
         self.sqm = sqm
         self.infec_minutes = 0
 
-        if loc_type == 'park':
+        if self.loc_type == 'park':
             self.sqm *= 10 # https://www.medrxiv.org/content/10.1101/2020.02.28.20029272v2 (I took a factor of 10 instead of 19 due to the large error bars)
         
         self.visits = []
-        self.avg_visit_time = avg_visit_times[loc_type]
+        self.visit_time = avg_visit_times[self.loc_type]
+        self.visit_prob = need_minutes[self.loc_type] / (self.visit_time * 7) # = minutes per week / (average visit time * days in the week)
 
 
     def register_visit(self, e, node_id):
-        visit_time = self.avg_visit_time
-        visit_prob = 0.0
-        if visit_time > 0.0:
-            visit_prob = need_minutes[self.loc_type] / (visit_time * 7) # = minutes per week / (average visit time * days in the week)
-        else:
-            return
-
-        if random.random() < visit_prob:
+        if random.random() < self.visit_prob:
             if node_id in e.quarantined.keys():
                 return
             if node_id in e.nodes_in_state[0]:
-                self.visits.append((node_id, visit_time))
+                self.visits.append((node_id, self.visit_time))
                 return
             spreading_node = False
             for s in e.states_spreading:
                 spreading_node |= node_id in e.nodes_in_state[s]
             if spreading_node:
-                self.infec_minutes += visit_time
+                self.infec_minutes += self.visit_time
                 return
 
 
@@ -68,9 +59,9 @@ class Location:
             node = visit[0]
             if node in e.nodes_in_state[0]:
                 infec_prob = visit[1] * base_rate
-            if random.random() < infec_prob:
-                e.nodes_in_state[0].remove(node)
-                infected_nodes.add(node)
+                if random.random() < infec_prob:
+                    e.nodes_in_state[0].remove(node)
+                    infected_nodes.add(node)
         
         # clear for next round
         self.visits = []
@@ -86,37 +77,11 @@ class Epsim:
         self.school_nbrs_split = school_nbrs_split
         self.office_nbrs = office_nbrs
         self.families = self.determine_clusters(self.family_nbrs)
-        self.family_locs = []
-        self.locations = {loc_type:[] for loc_type in loc_types}
+        print(f"family_nbrs: {len(self.family_nbrs)}, school_nbrs_standard: {len(self.school_nbrs_standard)}, " \
+              + f"school_nbrs_split: {len(self.school_nbrs_split[0])} {len(self.school_nbrs_split[1])}, office_nbrs: {len(self.office_nbrs)}, " \
+              + f"families: {len(self.families)}")
+        self.locations = {}  # locations of location type
         self.nearest_locs = [{} for family in self.families]  # nearest location of location type of family
-
-    
-    def add_location(self, loc_id, loc_type, x, y, sqm):
-        loc = Location(loc_id, loc_type, x, y, sqm)
-        if loc_type in self.locations.keys():
-            self.locations[loc_type].append(loc)
-        else:
-            print(f"Error, wrong location type '{loc_type}'")
-
-
-    def calc_dist(self, x1, y1, x2, y2):
-        return (np.abs(x1-x2)**2 + np.abs(y1-y2)**2)**0.5
-
-
-    def calc_dist_cheap(self, x1, y1, x2, y2):
-        return np.abs(x1-x2) + np.abs(y1-y2)
-
-
-    def update_nearest_locs(self):
-        for i, family_loc in enumerate(self.family_locs):
-            for loc_type, locs in self.locations.items():
-                min_dist = 99999.0
-                for loc in locs:
-                    d = self.calc_dist_cheap(family_loc[0], family_loc[1], loc.x, loc.y)
-                    if d < min_dist:
-                        min_dist = d
-                        self.nearest_locs[i][loc_type] = loc
-
 
     def spread(self, nbrs_dict, spreading_nodes, prob):
         infected_nodes = set()
@@ -214,7 +179,7 @@ class Epsim:
         # node states
         if omicron:
             self.num_node_states = 4
-            self.states_incubation = {}
+            self.states_incubation = set()
             self.states_spreading = {1, 2}
         else:
             self.num_node_states = 7
@@ -264,14 +229,12 @@ class Epsim:
               + f"start_weekday={start_weekday}, sim_iters={sim_iters}" + f"p_spread_family={p_spread_family}, p_spread_school={p_spread_school}," \
               + f"p_spread_office={p_spread_office}, p_detect_child={p_detect_child}, " \
               + f"p_detect_parent={p_detect_parent}, testing={testing}")
-        print(f"family_nbrs: {len(self.family_nbrs)}, school_nbrs_standard: {len(self.school_nbrs_standard)}, " \
-              + f"school_nbrs_split: {len(self.school_nbrs_split[0])} {len(self.school_nbrs_split[1])}, office_nbrs: {len(self.office_nbrs)}")
         print(f"start immune: {num_start_immune}")
 
         if print_progress:
             print("the following information represents the number of nodes per round for:")
             print("[(states), infected, infected_in_family, infected_in_school, infected_in_office, infected_by_children, infected_by_parents, " \
-                  +"quarantined_by_detection, quarantined_by_test]")
+                  +"quarantined_by_detection, quarantined_by_test, infected_in_location]")
 
         # initialize simulation variables
         num_state_infected_and_immune_per_rnd = []
@@ -285,6 +248,13 @@ class Epsim:
             # info tracking: number of nodes per state at beginning of the day
             num_nodes_per_state = [len(nodes) for nodes in self.nodes_in_state]
             num_nodes_per_state.append(n - sum(num_nodes_per_state))
+
+            sim_end = True
+            for s in (self.states_spreading | self.states_incubation):
+                sim_end &= num_nodes_per_state[s] == 0
+            if sim_end:
+                print("SIM END")
+                break
 
             # compute spreading nodes for this round
             self.spreading_nodes = set()
