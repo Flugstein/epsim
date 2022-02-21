@@ -159,7 +159,7 @@ class EpsimGraph:
         for parent_node in parent_nodes:
             self.duplicate_parents(parent_node)
 
-        # children: k/l^2 many l*l grids, randomly place l^2 nodes on grid, cluster 8-neighbourhood
+        # children: k/l^2 many l*l grids, randomly place l^2 nodes on grid, cluster 8-neighborhood
         # perc_split_classes of grids (school classes) are divided into 2, with a sparser grid
         l = 5
         if self.print_progress:
