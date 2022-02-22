@@ -1,28 +1,13 @@
 import csv
-import sys
-import yaml
 import os
 import numpy as np
 import random
 import pickle
 from epsim import Location
 
-# File to read in CSV files of building definitions.
-# The format is as follows:
-# No,building,Longitude,Latitude,Occupancy
-
-def apply_building_mapping(mapdict, label):
-    """
-    Applies a building map YAML to a given label, binning it
-    into the appropriate category.
-    """
-    if label == 'house':
-        return label
-    for category in mapdict:
-        if label in mapdict[category]['labels']:
-            return category
-    return None
-
+# Read csv file of buildings and compute nearest locations.
+# The format is:
+# building_type,longitude,latitude,sqm
 
 def calc_dist(x1, y1, x2, y2):
         return (np.abs(x1-x2)**2 + np.abs(y1-y2)**2)**0.5
@@ -32,17 +17,13 @@ def calc_dist_cheap(x1, y1, x2, y2):
     return np.abs(x1-x2) + np.abs(y1-y2)
 
 
-def read_building_csv(e, csvpath, building_type_map="input_data/building_types_map.yml"):
+def read_building_csv(e, csvpath):
     if os.path.isfile(csvpath + ".p"):
         pickle_data = pickle.load(open(csvpath + ".p", "rb"))
         house_locs = pickle_data['house_locs']
         locations = pickle_data['locations']
         house_nearest_locs = pickle_data['house_nearest_locs']
     else:
-        building_mapping = {}
-        with open(building_type_map) as f:
-            building_mapping = yaml.safe_load(f)
-
         house_locs = []
         locations = {}
 
@@ -58,9 +39,7 @@ def read_building_csv(e, csvpath, building_type_map="input_data/building_types_m
                     row_number += 1
                     continue
 
-                loc_type = apply_building_mapping(building_mapping, row[0])
-                if loc_type == None:
-                    continue
+                loc_type = row[0]
 
                 x = float(row[1])
                 y = float(row[2])
@@ -79,9 +58,6 @@ def read_building_csv(e, csvpath, building_type_map="input_data/building_types_m
                     locations[loc_type].append((x, y, sqm))
 
                 row_number += 1
-
-            print(row_number, "read", file=sys.stderr)
-            print("bounds:", xbound, ybound, file=sys.stderr)
 
         # find nearest location for every house
         house_nearest_locs = [{} for house in house_locs]
