@@ -8,4 +8,4 @@ COVID-19 epidemic simulation modeling family, schools, offices and leisure activ
 
 ## Run
 - For examples on how to use the API see `epsim_plot.ipynb`
-- If you do not supply a `buildings.csv` file, the simulation runs without leisure activites, which is a lot faster.
+- If you do not call `read_building_csv()` while setting up the Epsim object, the simulation runs without leisure activites.
