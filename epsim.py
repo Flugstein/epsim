@@ -18,6 +18,14 @@ def chunks(lst, n):
         yield lst[i:i + n]
 
 
+def tuple2dict(tpl, nestings):
+    dct = dict(tpl)
+    if nestings > 1:
+        for k, v in dct.items():
+            dct[k] = tuple2dict(v, nestings - 1)
+    return dct
+
+
 class Location:
     def __init__(self, loc_type, x, y, sqm):
         self.loc_type = loc_type
@@ -145,37 +153,46 @@ class Epsim:
         return agent in self.school_nbrs_standard or agent in self.school_nbrs_split[0] or agent in self.school_nbrs_split[1]
 
 
-    def run_sim(self, sim_iters, num_start_agents, perc_immune_agents, start_weekday, p_spread_family, p_spread_school, p_spread_office, p_detect_child, 
-                p_detect_parent, testing, omicron=False, split_stay_home=False, print_progress=False):
+    def run_sim(self, sim_iters, num_start_agents, perc_immune_agents, start_weekday, p_spread_family_dict, p_spread_school_dict, p_spread_office_dict, 
+                p_detect_child_dict, p_detect_parent_dict, testing_dict, omicron=False, split_stay_home=False, print_progress=False):
         """
         Run the epidemic simulation with the given parameters.
 
-        sim_iters         -- number of iterations/rounds to simulate
-        num_start_agents   -- number of initially infecteded agents
-                             can be a single value, where the agents get disributed equally over all states, or a list with the exact number of agents per state
-        perc_immune_agents -- percentage of initially immune agents
-                             can be a single value, where the agents are randomly chosen, or a dict with the percentage of agents per agent class
-                             (families, parents, children)
-        start_weekday     -- weekday to start the simulation with (0: Monday, 1: Tuesday, ..., 6: Sunday)
-        p_spread_family   -- probability to spread the infection within the family
-        p_spread_school   -- probability to spread the infection within the school
-        p_spread_office   -- probability to spread the infection within the office
-        p_detect_child    -- probability that an infected child gets detected and quarantined because of its symtoms
-        p_detect_parent   -- probability that an infected parent gets detected and quarantined because of its symtoms
-        testing           -- dict of type of test with probability that a test detects an infected person and weekday it is taken
-                             example: testing={'pcr': {'p': 0.95, 'weekdays': [2]}, 'antigen': {'p': 0.5, 'weekdays': [0, 4]}}
-        omicron           -- enable omicron variant (lower incubation time)
-        split_stay_home   -- True: the two halfs of split classes don't alternate, but one half always stays home
-        print_progress    -- print simulation statistics every round onto the console
+        sim_iters            -- number of iterations/rounds to simulate
+        num_start_agents     -- number of initially infecteded agents
+                                can be a single value, where the agents get disributed equally over all states, 
+                                or a list with the exact number of agents per state
+        perc_immune_agents   -- percentage of initially immune agents
+                                can be a single value, where the agents are randomly chosen, or a dict with the percentage of agents per agent class
+                                (families, parents, children)
+        start_weekday        -- weekday to start the simulation with (0: Monday, 1: Tuesday, ..., 6: Sunday)
+        p_spread_family_dict -- probability to spread the infection within the family
+        p_spread_school_dict -- probability to spread the infection within the school
+        p_spread_office_dict -- probability to spread the infection within the office
+        p_detect_child_dict  -- probability that an infected child gets detected and quarantined because of its symtoms
+        p_detect_parent_dict -- probability that an infected parent gets detected and quarantined because of its symtoms
+        testing_dict         -- dict of type of test with probability that a test detects an infected person and weekday it is taken
+                                example: testing={'pcr': {'p': 0.95, 'weekdays': [2]}, 'antigen': {'p': 0.5, 'weekdays': [0, 4]}}
+        omicron              -- enable omicron variant (lower incubation time)
+        split_stay_home      -- True: the two halfs of split classes don't alternate, but one half always stays home
+        print_progress       -- print simulation statistics every round onto the console
         """
 
         # input conversion
-        if isinstance(perc_immune_agents, tuple):
-            perc_immune_agents = dict(perc_immune_agents)
-        if isinstance(testing, tuple):
-            testing = dict(testing)
-            for key, value in testing.items():
-                testing[key] = dict(value)
+        if isinstance(perc_immune_agents, tuple): perc_immune_agents = tuple2dict(perc_immune_agents, 1)
+        if isinstance(p_spread_family_dict, tuple): p_spread_family_dict = tuple2dict(p_spread_family_dict, 1)
+        if isinstance(p_spread_school_dict, tuple): p_spread_school_dict = tuple2dict(p_spread_school_dict, 1)
+        if isinstance(p_spread_office_dict, tuple): p_spread_office_dict = tuple2dict(p_spread_office_dict, 1)
+        if isinstance(p_detect_child_dict, tuple): p_detect_child_dict = tuple2dict(p_detect_child_dict, 1)
+        if isinstance(p_detect_parent_dict, tuple): p_detect_parent_dict = tuple2dict(p_detect_parent_dict, 1)
+        if isinstance(testing_dict, tuple): testing_dict = tuple2dict(testing_dict, 3)
+
+        if 0 not in p_spread_family_dict: raise ValueError("p_spread_family_dict must cointain value for round 0")
+        if 0 not in p_spread_school_dict: raise ValueError("p_spread_school_dict must cointain value for round 0")
+        if 0 not in p_spread_office_dict: raise ValueError("p_spread_office_dict must cointain value for round 0")
+        if 0 not in p_detect_child_dict: raise ValueError("p_detect_child_dict must cointain value for round 0")
+        if 0 not in p_detect_parent_dict: raise ValueError("p_detect_parent_dict must cointain value for round 0")
+        if 0 not in testing_dict: raise ValueError("testing_dict must cointain value for round 0")
 
         self.agents_in_state = []
         self.agents_in_state.append({agent for agent in self.family_nbrs.keys()})
@@ -231,9 +248,9 @@ class Epsim:
 
         # print simulation info
         print(f"starting simulation with n={n}, num_start_agents={num_start_agents}, perc_immune_agents={perc_immune_agents}, " \
-              + f"start_weekday={start_weekday}, sim_iters={sim_iters}" + f"p_spread_family={p_spread_family}, p_spread_school={p_spread_school}," \
-              + f"p_spread_office={p_spread_office}, p_detect_child={p_detect_child}, " \
-              + f"p_detect_parent={p_detect_parent}, testing={testing}")
+              + f"start_weekday={start_weekday}, sim_iters={sim_iters}" + f"p_spread_family_dict={p_spread_family_dict}, " \
+              + f"p_spread_school_dict={p_spread_school_dict}, p_spread_office={p_spread_office_dict}, p_detect_child_dict={p_detect_child_dict}, " \
+              + f"p_detect_parent_dict={p_detect_parent_dict}, testing_dict={testing_dict}")
         print(f"start immune: {num_start_immune}")
 
         if print_progress:
@@ -250,6 +267,13 @@ class Epsim:
         for rnd in range(sim_iters):
             weekday = (rnd + start_weekday) % 7
 
+            if rnd in p_spread_family_dict: p_spread_family = p_spread_family_dict[rnd]
+            if rnd in p_spread_office_dict: p_spread_office = p_spread_office_dict[rnd]
+            if rnd in p_spread_school_dict: p_spread_school = p_spread_school_dict[rnd]
+            if rnd in p_detect_child_dict: p_detect_child = p_detect_child_dict[rnd]
+            if rnd in p_detect_parent_dict: p_detect_parent = p_detect_parent_dict[rnd]
+            if rnd in testing_dict: testing = testing_dict[rnd]
+
             # info tracking: number of agents per state at beginning of the day
             num_agents_per_state = [len(agents) for agents in self.agents_in_state]
             num_agents_per_state.append(n - sum(num_agents_per_state))
@@ -259,7 +283,6 @@ class Epsim:
             for s in (self.states_infectious | self.states_exposed):
                 sim_end &= num_agents_per_state[s] == 0
             if sim_end:
-                print("SIM END")
                 break
 
             # compute infectious agents for this round

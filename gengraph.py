@@ -254,5 +254,3 @@ class EpsimGraph:
                     nbrs.remove(node)
                     self.office_nbrs[node] = nbrs
             cluster_size += 1
-
-        print()
