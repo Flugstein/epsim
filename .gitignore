@@ -1,0 +1,6 @@
+# Python
+__pychace__/
+*.pyc
+
+# Jupyter Notebooks
+.ipnb_checkpoints/
