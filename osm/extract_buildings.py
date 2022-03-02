@@ -4,35 +4,28 @@ import numpy as np
 import csv
 
 
-def extract_houses(root, node_list, outpath, population, avg_household_size):
-    """
-    Extract houses from open street map file.
-    Since information on individual houses is not always available, houses are generated randomly across residential areas.
-    """
-    num_houses = int(population / avg_household_size)
-
-    residential_areas = []
-    total_area = 0
-    for c1 in root:
-        if c1.tag == 'way':
-            for c2 in c1:
-                if get_tag(c2, 'landuse') == 'residential':
-                    p = get_polygon_from_way(c1, node_list)
-                    if p:
-                        area = int(calc_geom_area(p))
-                        residential_areas.append((p, p.centroid.x, p.centroid.y, area))
-                        total_area += area
-
-    num_actual_houses = 0
+def extract_houses(root, node_list, outpath):
+    num_houses = 0
+    house_building_types = ['yes', 'apartments', 'detached', 'house', 'residential', 'semidetached_house', 'terrace', 'dormitory']
     with open(outpath, 'a') as f:
-        for ra in residential_areas:
-            num_houses_ra = int(num_houses * ra[3] / total_area)
-            num_actual_houses += num_houses_ra
-            points = random_points_within(ra[0], num_houses_ra)
-            for h in points:
-                f.write("house,{},{},{}\n".format(h.x, h.y, 0))
-    
-    print(f"Extracted {num_actual_houses} house locations")
+        for c1 in root:
+            if c1.tag == 'way':
+                tags = get_tags(c1)
+                if 'building' in tags and tags['building'] in house_building_types:  # https://wiki.openstreetmap.org/wiki/Key:building
+                    if not ('man_made' in tags or 'amenity' in tags or 'layer' in tags):  # filter out other structures
+                        p = get_polygon_from_way(c1, node_list)
+                        if p:
+                            x, y, sqm = get_polygon_x_y_sqm(p)
+                            if tags['building'] == 'yes':
+                                if sqm > 50 and sqm < 400:  # filter out very small and large unspecified buildings
+                                    f.write("house,{},{},{}\n".format(x, y, sqm))
+                                    num_houses += 1
+                            else:
+                                levels = int(float(tags['building:levels'])) if 'building:levels' in tags else 1
+                                f.write("house,{},{},{}\n".format(x, y, sqm * levels))
+                                num_houses += 1
+
+    print(f"Extracted {num_houses} house locations")
 
 
 def extract_leisure(root, node_list, outpath):
@@ -81,14 +74,12 @@ def extract_shops(root, node_list, outpath):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 5:
-        print("usage: python extract_buildings.py osm_file outfile population avg_household_size")
+    if len(sys.argv) != 3:
+        print("usage: python extract_buildings.py osm_file outfile")
         exit(0)
 
     tree = ET.parse(sys.argv[1])
     outpath = sys.argv[2]
-    population = int(sys.argv[3])
-    avg_household_size = float(sys.argv[4])
 
     root = tree.getroot()
     node_list = build_node_list(root)
@@ -96,6 +87,6 @@ if __name__ == "__main__":
     with open(outpath, 'w') as f:
         f.write("building_type,longitude,latitude,sqm\n")
 
-    extract_houses(root, node_list, outpath, population, avg_household_size)
+    extract_houses(root, node_list, outpath)
     extract_leisure(root, node_list, outpath)
     extract_shops(root, node_list, outpath)

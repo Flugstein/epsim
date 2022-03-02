@@ -1,8 +1,9 @@
 # Epidemic Simulation
 COVID-19 epidemic simulation modeling family, schools, offices and leisure activities based on open street map data.
+Leisure activity simulation based on [FACS](https://github.com/djgroen/facs).
 
 ## Prepare OSM data
-- Obtain an OSM XML file containing the region you want to simulate. This can be done by using the OSM export feature on [openstreetmap.org](https://openstreetmap.org).
+- Obtain an OSM XML file containing the region you want to simulate. This can be done by using the export feature on [openstreetmap.org](https://openstreetmap.org). For example [Salzburg](https://overpass-api.de/api/map?bbox=12.9968,47.7684,13.0940,47.8341).
 - Find the population and average household size of your region. This is necessary, because currently houses are not extracted, but generated randomly in residential areas.
 - Run `python osm/extract_buildings.py osm_file.xml outfile.csv population avg_household_size` to extract buildings and save them in a CSV file.
 

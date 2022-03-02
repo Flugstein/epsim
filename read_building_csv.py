@@ -51,7 +51,7 @@ def read_building_csv(e, csvpath):
                 sqm = int(row[3])
 
                 if loc_type == 'house':
-                    house_locs.append((x, y))
+                    house_locs.append((x, y, sqm))
                 else:
                     if loc_type not in locations:
                         locations[loc_type] = []
@@ -75,8 +75,27 @@ def read_building_csv(e, csvpath):
 
 
     e.locations = {loc_type: [Location(loc_type, loc[0], loc[1], loc[2]) for loc in locs] for loc_type, locs in locations.items()}
-    #family_house = [i % len(house_locs) for i, family in enumerate(e.families)]  # distribute families to houses
-    family_house = [random.randint(0, len(house_locs) - 1) for i, family in enumerate(e.families)]  # distribute families to houses
+
+    # distribute families to houses
+    random.shuffle(house_locs)
+    family_house = [0 for family in e.families]
+    family_i = 0
+    for house_i, house_loc in enumerate(house_locs):
+        sqm = house_loc[2]
+        if family_i > len(e.families) - 1:
+            print(f"{len(house_locs) - house_i} houses remain empty")
+            break
+        while sqm > 0 and family_i < len(e.families):
+            family_house[family_i] = house_i
+            sqm -= 100  # 100 sqm per family for multifamily houses (https://www.statistik.at/web_de/statistiken/menschen_und_gesellschaft/wohnen/wohnsituation/081235.html)
+            family_i += 1
+    
+    if family_i < len(e.families) - 1:
+        print(f"{len(e.families) - 1 - family_i} families did not get a house, they are randomly distributed to occupied houses")
+        while family_i < len(e.families) - 1:
+            family_house[family_i] = random.randint(0, len(house_locs) - 1)
+            family_i += 1
+
     e.nearest_locs = [{loc_type: locs[house_nearest_locs[family_house[f]][loc_type]] for loc_type, locs in e.locations.items()} for f, family in enumerate(e.families)]
 
     print(f"read in {len(house_locs)} houses and {sum(len(locs) for loc_type, locs in locations.items())} other locations")

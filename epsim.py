@@ -140,7 +140,7 @@ class Epsim:
         agents_to_skip = set()
         for agent, nbrs in nbrs_dict.items():
             if agent not in agents_to_skip:
-                clusters.append([agent] + sorted(list(nbrs)))
+                clusters.append(sorted([agent] + list(nbrs)))
                 agents_to_skip.update(nbrs)
         return clusters
 

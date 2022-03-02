@@ -45,6 +45,10 @@ def calc_geom_area(poly):
     return p.area
 
 
+def get_polygon_x_y_sqm(poly):
+    return poly.centroid.x, poly.centroid.y, int(calc_geom_area(poly))
+
+
 def random_points_within(poly, num_points):
     min_x, min_y, max_x, max_y = poly.bounds
     points = []
@@ -55,6 +59,10 @@ def random_points_within(poly, num_points):
             points.append(random_point)
 
     return points
+
+
+def get_tags(c1):
+    return {c2.attrib['k']: c2.attrib['v'] for c2 in c1 if c2.tag == 'tag'}
 
 
 def get_tag(c2, tag_type):
