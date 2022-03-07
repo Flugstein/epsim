@@ -37,13 +37,6 @@ class Location:
         self.visit_time = avg_visit_times[self.loc_type]
         self.visit_prob = need_minutes[self.loc_type] / (self.visit_time * 7) # = minutes per week / (average visit time * days in the week)
 
-        minutes_opened = 12*60
-        self.base_rate = contact_rate_multipliers[self.loc_type] * (infection_rate / 360.0) * (1.0 / minutes_opened) * (self.infec_minutes / self.sqm)
-        # For Covid-19 this should be 0.07 (infection rate) for 1 infectious person, and 1 susceptible person within 2m for a full day.
-        # Assume they can do this in a 4m^2 area.
-        # So 0.07 = x * (24*60/24*60) * (24*60/4) -> 0.07 = x * 360 -> x = 0.07/360 = 0.0002
-        # "1.0" is a place holder for v[1] (visited minutes).
-
 
     def register_visit(self, e, agent_id):
         if random.random() < self.visit_prob:
@@ -61,11 +54,18 @@ class Location:
 
 
     def spread(self, e):
+        minutes_opened = 12*60
+        base_rate = contact_rate_multipliers[self.loc_type] * (infection_rate / 360.0) * (1.0 / minutes_opened) * (self.infec_minutes / self.sqm)
+        # For Covid-19 this should be 0.07 (infection rate) for 1 infectious person, and 1 susceptible person within 2m for a full day.
+        # Assume they can do this in a 4m^2 area.
+        # So 0.07 = x * (24*60/24*60) * (24*60/4) -> 0.07 = x * 360 -> x = 0.07/360 = 0.0002
+        # "1.0" is a place holder for v[1] (visited minutes).
+
         infected_agents = set()
         for visit in self.visits:
             agent = visit[0]
             if agent in e.agents_in_state[0]:
-                infec_prob = visit[1] * self.base_rate
+                infec_prob = visit[1] * base_rate
                 if random.random() < infec_prob:
                     e.agents_in_state[0].remove(agent)
                     infected_agents.add(agent)
@@ -244,7 +244,7 @@ class Epsim:
 
         # print simulation info
         print(f"starting simulation with n={n}, num_start_agents={num_start_agents}, perc_immune_agents={perc_immune_agents}, " \
-              + f"start_weekday={start_weekday}, sim_iters={sim_iters}" + f"p_spread_family_dict={p_spread_family_dict}, " \
+              + f"start_weekday={start_weekday}, sim_iters={sim_iters}, " + f"p_spread_family_dict={p_spread_family_dict}, " \
               + f"p_spread_school_dict={p_spread_school_dict}, p_spread_office={p_spread_office_dict}, p_detect_child_dict={p_detect_child_dict}, " \
               + f"p_detect_parent_dict={p_detect_parent_dict}, testing_dict={testing_dict}")
         print(f"start immune: {num_start_immune}")
