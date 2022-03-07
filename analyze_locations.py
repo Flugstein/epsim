@@ -15,7 +15,7 @@ if __name__ == "__main__":
     df = pd.read_csv(buildings_csv_path, delimiter=',')
     df.columns = ['type', 'x', 'y', 'area']
     groups = df.groupby('type').count()
-    type = ['house', 'park', 'leisure', 'supermarket', 'shopping']
+    type = ['house', 'shop', 'supermarket', 'restaurant', 'leisure']
     df['color'] = 0
     for index, row in df.iterrows():
         df['color'][index] = type.index(row['type'])

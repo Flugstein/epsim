@@ -11,8 +11,8 @@ def extract_houses(root, node_list, outpath):
         for c1 in root:
             if c1.tag == 'way':
                 tags = get_tags(c1)
-                if 'building' in tags and tags['building'] in house_building_types:  # https://wiki.openstreetmap.org/wiki/Key:building
-                    if not ('man_made' in tags or 'amenity' in tags or 'layer' in tags):  # filter out other structures
+                if tags.get('building') in house_building_types:  # https://wiki.openstreetmap.org/wiki/Key:building
+                    if not (tags.get('man_made') or tags.get('amenity') or tags.get('layer')):  # filter out other structures
                         p = get_polygon_from_way(c1, node_list)
                         if p:
                             x, y, sqm = get_polygon_x_y_sqm(p)
@@ -28,49 +28,73 @@ def extract_houses(root, node_list, outpath):
     print(f"Extracted {num_houses} house locations")
 
 
-def extract_leisure(root, node_list, outpath):
-    """
-    Extract leisure locations from open street map file.
-    """
-    num_leisure = 0
-    num_parks = 0
-    with open(outpath, 'a') as f:
-        for c1 in root:
-            if c1.tag == 'way':
-                for c2 in c1:
-                    leisure_tag = get_tag(c2, 'leisure')
-                    if leisure_tag:
-                        p = get_polygon_from_way(c1, node_list)
-                        if p:
-                            if leisure_tag in ['park', 'garden', 'nature_reserve']:
-                                f.write("park,{},{},{}\n".format(p.centroid.x, p.centroid.y, int(calc_geom_area(p))))
-                                num_parks += 1
-                            else:
-                                f.write("leisure,{},{},{}\n".format(p.centroid.x, p.centroid.y, int(calc_geom_area(p))))
-                                num_leisure += 1
-
-    print(f"Extracted {num_leisure} leisure and {num_parks} park locations")
-
-
 def extract_shops(root, node_list, outpath):
-    num_supermarket = 0
-    num_shopping = 0
+    num_supermarkets = 0
+    num_shops = 0
     with open(outpath, 'a') as f:
         for c1 in root:
-            if c1.tag == 'way':
-                for c2 in c1:
-                    if get_tag(c2, 'shop') == 'supermarket' or get_tag(c2, 'building') == 'supermarket':
-                        p = get_polygon_from_way(c1, node_list)
-                        if p:
-                            f.write("supermarket,{},{},{}\n".format(p.centroid.x, p.centroid.y, int(calc_geom_area(p))))
-                            num_supermarket += 1
-                    elif get_tag(c2, 'shop'):
-                        p = get_polygon_from_way(c1, node_list)
-                        if p:
-                            f.write("shopping,{},{},{}\n".format(p.centroid.x, p.centroid.y, int(calc_geom_area(p))))
-                            num_shopping += 1
+            tags = get_tags(c1)
+            if tags.get('shop'):
+                shop_tag = tags['shop']
+                if c1.tag == 'way':
+                    p = get_polygon_from_way(c1, node_list)
+                    if not p:
+                        continue
+                    area = int(calc_geom_area(p))
+                    x = p.centroid.x
+                    y = p.centroid.y
+                elif c1.tag == 'node':
+                    x = c1.attrib['lon']
+                    y = c1.attrib['lat']
+                    if shop_tag == 'supermarket':
+                        area = 1500  # default sqm for supermarket
+                    else:
+                        area = 500  # default sqm for shop
+                else:
+                    continue
+                if shop_tag == 'supermarket':
+                    f.write("supermarket,{},{},{}\n".format(x, y, area))
+                    num_supermarkets += 1
+                else:
+                    f.write("shop,{},{},{}\n".format(x, y, area))
+                    num_shops += 1
 
-    print(f"Extracted {num_supermarket} supermarket and {num_shopping} shopping locations")
+    print(f"Extracted {num_supermarkets} supermarket and {num_shops} shop locations")
+
+
+def extract_leisure(root, node_list, outpath):
+    num_restaurant = 0
+    num_leisure = 0
+    restaurant_tags = ['bar', 'biergarten', 'cafe', 'fast_food', 'food_court', 'ice_cream', 'pub', 'restaurant']
+    entertainment_tags = ['arts_centre', 'brothel', 'casino', 'cinema', 'community_centre', 'conference_centre', 'events_venue', 'gambling', 'nightclub', 
+                          'social_centre', 'stripclub', 'swingerclub', 'theatre', 'place_of_worship']
+    leisure_tags = ['adult_gaming_centre', 'amusement_arcade', 'bowling_alley', 'dance', 'escape_game', 'fitness_centre', 'hackerspace', 'sauna', 
+                    'sports_centre', 'sports_hall']
+    with open(outpath, 'a') as f:
+        for c1 in root:
+            tags = get_tags(c1)
+            if tags.get('amenity') or tags.get('leisure'):
+                if c1.tag == 'way':
+                    p = get_polygon_from_way(c1, node_list)
+                    if not p:
+                        continue
+                    area = int(calc_geom_area(p))
+                    x = p.centroid.x
+                    y = p.centroid.y
+                elif c1.tag == 'node':
+                    x = c1.attrib['lon']
+                    y = c1.attrib['lat']
+                    area = 500  # default sqm
+                else:
+                    continue
+                if tags.get('amenity') in restaurant_tags:
+                    f.write("restaurant,{},{},{}\n".format(x, y, area))
+                    num_restaurant += 1
+                if (tags.get('amenity') in entertainment_tags) or (tags.get('leisure') in leisure_tags and tags.get('access') != 'private'):
+                    f.write("leisure,{},{},{}\n".format(x, y, area))
+                    num_leisure += 1
+
+    print(f"Extracted {num_restaurant} restaurant and {num_leisure} leisure locations")
 
 
 if __name__ == "__main__":
@@ -88,5 +112,5 @@ if __name__ == "__main__":
         f.write("building_type,longitude,latitude,sqm\n")
 
     extract_houses(root, node_list, outpath)
-    extract_leisure(root, node_list, outpath)
     extract_shops(root, node_list, outpath)
+    extract_leisure(root, node_list, outpath)

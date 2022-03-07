@@ -6,9 +6,9 @@ import random
 import math
 from pathlib import Path
 
-avg_visit_times = {'park': 90, 'leisure': 60, 'shopping': 60, 'supermarket': 60}  # average time spent per visit
-contact_rate_multipliers = {'park': 0.25, 'leisure': 0.25, 'shopping': 0.25, 'supermarket': 0.25}
-need_minutes = {'park': 74, 'leisure': 600, 'shopping': 98, 'supermarket': 60}  # personal needs in minutes per week
+avg_visit_times = {'shop': 60, 'supermarket': 60, 'restaurant': 60, 'leisure': 120}  # average time spent per visit
+contact_rate_multipliers = {'shop': 0.25, 'supermarket': 0.25, 'restaurant': 0.25, 'leisure': 0.25}
+need_minutes = {'shop': 90, 'supermarket': 60, 'restaurant': 60, 'leisure': 600}  # personal needs in minutes per week
 infection_rate = 0.07
 
 
@@ -33,10 +33,6 @@ class Location:
         self.y = y
         self.sqm = sqm
         self.infec_minutes = 0
-
-        if self.loc_type == 'park':
-            self.sqm *= 10 # https://www.medrxiv.org/content/10.1101/2020.02.28.20029272v2 (Took a factor of 10 instead of 19 due to the large error bars)
-        
         self.visits = []
         self.visit_time = avg_visit_times[self.loc_type]
         self.visit_prob = need_minutes[self.loc_type] / (self.visit_time * 7) # = minutes per week / (average visit time * days in the week)
