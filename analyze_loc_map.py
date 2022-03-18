@@ -6,7 +6,7 @@ import sys
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        print("usage: python analyze_locations.py buildings.csv out.html")
+        print("usage: python analyze_loc_map.py buildings.csv out.html")
         exit(0)
 
     buildings_csv_path = sys.argv[1]
