@@ -41,14 +41,14 @@ def read_building_csv(e, csvpath):
 
                 loc_type = row[0]
 
-                x = float(row[1])
-                y = float(row[2])
+                x = float(row[2])
+                y = float(row[3])
                 xbound[0] = min(x, xbound[0])
                 ybound[0] = min(y, ybound[0])
                 xbound[1] = max(x, xbound[1])
                 ybound[1] = max(y, ybound[1])
 
-                sqm = int(row[3])
+                sqm = int(row[4])
 
                 if loc_type == 'house':
                     house_locs.append((x, y, sqm))
