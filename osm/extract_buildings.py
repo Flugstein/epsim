@@ -31,6 +31,11 @@ def extract_houses(root, node_list, outpath):
 
 def extract_shops(root, node_list, outpath):
     # https://wiki.openstreetmap.org/wiki/Key:shop
+    # [1] https://de.statista.com/statistik/daten/studie/289775/umfrage/verkaufsflaeche-je-filiale-der-unternehmen-im-lebensmittelhandel-in-oesterreich/
+    # [2] https://de.statista.com/statistik/daten/studie/297045/umfrage/verkaufsflaeche-der-groessten-lebensmittelhaendler-in-oesterreich/
+    # [3] https://de.statista.com/statistik/daten/studie/895728/umfrage/verkaufsflaeche-im-stationaeren-einzelhandel-in-oesterreich/
+    # [4] https://de.statista.com/statistik/daten/studie/283959/umfrage/unternehmen-im-einzelhandel-in-oesterreich/
+    # [5] https://de.statista.com/statistik/daten/studie/1191398/umfrage/shopgroesse-in-ausgewaehlten-staedten-und-einkaufsstrassen-in-oesterreich/
     with open(outpath, 'a') as f:
         for c1 in root:
             tags = get_tags(c1)
@@ -47,9 +52,9 @@ def extract_shops(root, node_list, outpath):
                     x = c1.attrib['lon']
                     y = c1.attrib['lat']
                     if shop_tag == 'supermarket':
-                        sqm = 1500  # default sqm for supermarket
+                        sqm = 525  # default sqm for supermarket: avg in Austria ~700sqm [1][2], but should be smaller for urban regions
                     else:
-                        sqm = 500  # default sqm for shop
+                        sqm = 114  # default sqm for shop: avg in Austria ~368sqm [3][4], in Salzburg 114sqm [5]
                 else:
                     continue
                 if shop_tag == 'supermarket':

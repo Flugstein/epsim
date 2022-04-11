@@ -11,5 +11,6 @@ for building_type in df.building_type.unique():
         print(f"{tag:<28} {len(df_s[df_s['tag'] == tag]):>6}")
     print()
 
-print(f"Sqm of all buildings: {df['sqm'].sum()}")
-print(f"House sqm: {df[df['building_type'] == 'house']['sqm'].sum()}")
+print(f"sqm of all buildings: {df['sqm'].sum()}")
+print(f"house sqm: {df[df['building_type'] == 'house']['sqm'].sum()}")
+print(f"bbox: {df['longitude'].min()},{df['latitude'].min()},{df['longitude'].max()},{df['latitude'].min()}")

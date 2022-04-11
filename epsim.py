@@ -22,8 +22,9 @@ def tuple2dict(tpl, nestings):
 
 
 class Location:
-    def __init__(self, loc_type, x, y, sqm):
+    def __init__(self, loc_type, tag, x, y, sqm):
         self.loc_type = loc_type
+        self.tag = tag
         self.x = x
         self.y = y
         self.sqm = sqm
@@ -51,11 +52,10 @@ class Location:
 
     def spread(self, e):
         minutes_opened = 12*60
-        base_rate = e.contact_mult[self.loc_type] * (e.loc_infec_rate / 360.0) * (1.0 / minutes_opened) * (self.infec_minutes / self.sqm)
-        # For Covid-19 this should be 0.07 (infection rate) for 1 infectious person, and 1 susceptible person within 2m for a full day.
-        # Assume they can do this in a 4m^2 area.
-        # So 0.07 = x * (24*60/24*60) * (24*60/4) -> 0.07 = x * 360 -> x = 0.07/360 = 0.0002
-        # "1.0" is a place holder for v[1] (visited minutes).
+
+        # e.loc_infec_rate: infection rate for 1 infectious person, and 1 susceptible person within 13sqm for 8h
+        # "1.0" is a place holder for visit[1] (visited minutes)
+        base_rate = e.contact_mult[self.loc_type] * (e.loc_infec_rate / (8*60/13)) * (1.0 / minutes_opened) * (self.infec_minutes / self.sqm)
 
         infected_agents = set()
         for visit in self.visits:
@@ -84,8 +84,10 @@ class Epsim:
         print(f"family_nbrs: {len(self.family_nbrs)}, school_nbrs_standard: {len(self.school_nbrs_standard)}, " \
               + f"school_nbrs_split: {len(self.school_nbrs_split[0])} {len(self.school_nbrs_split[1])}, "\
               + f"office_nbrs: {len(self.office_nbrs)}, families: {len(self.families)}")
-        self.locations = {}  # locations of location type
-        self.nearest_locs = [{} for family in self.families]  # nearest location of location type of family
+        self.locations = {'supermarket': [], 'shop': [], 'restaurant': [], 'leisure': [], 'nightlife': []}  # locations of location type
+        self.house_families = []  # families of houses
+        #self.nearest_locs = [{} for family in self.families]  # visit locations of location type of house
+        self.house_visit_locs = []  # visit locations of location type of house
 
 
     def spread(self, nbrs_dict, infectious_agents, prob):
@@ -387,10 +389,12 @@ class Epsim:
             quarantined_by_detection_in_school = quarantined_by_detection_in_school_standard | quarantined_by_detection_in_school_split
 
             # register visits
-            for i, family in enumerate(self.families):
-                for loc_type, loc in self.nearest_locs[i].items():
-                    for agent in family:
-                        loc.register_visit(self, agent)
+            for h, families in enumerate(self.house_families):
+                for loc_type, visit_locs in self.house_visit_locs[h].items():
+                    for f in families:
+                        for agent in self.families[f]:
+                            visit_loc = random.choice(visit_locs)  # pick random location from favourite locations
+                            visit_loc.register_visit(self, agent)
 
             # spread in locations
             infected_in_location = {}

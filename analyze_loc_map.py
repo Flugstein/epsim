@@ -13,9 +13,9 @@ if __name__ == "__main__":
     outpath = sys.argv[2]
 
     df = pd.read_csv(buildings_csv_path, delimiter=',')
-    df.columns = ['type', 'x', 'y', 'area']
+    df.columns = ['type', 'cat', 'x', 'y', 'area']
     groups = df.groupby('type').count()
-    type = ['house', 'shop', 'supermarket', 'restaurant', 'leisure']
+    type = ['house', 'shop', 'supermarket', 'restaurant', 'leisure', 'nightlife']
     df['color'] = 0
     for index, row in df.iterrows():
         df['color'][index] = type.index(row['type'])
@@ -23,7 +23,7 @@ if __name__ == "__main__":
     fig = px.scatter_mapbox(df, lat="y", lon="x",
                             hover_name="type",
                             color = 'color',
-                            color_continuous_scale=["crimson", "darkgreen", "gold", "purple", "blue"],
+                            color_continuous_scale=["crimson", "darkgreen", "orange", "purple", "blue", "darkblue"],
                             zoom=8,  height=800)
     fig.update_layout(mapbox_style="open-street-map")
     py.offline.plot(fig, filename=outpath)
