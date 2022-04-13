@@ -1,7 +1,8 @@
 import pandas as pd
 import csv
+import sys
 
-df = pd.read_csv("input_data/salzburg_buildings.csv")
+df = pd.read_csv(sys.argv[1])
 
 for building_type in df.building_type.unique():
     df_s = df.loc[df.building_type == building_type]

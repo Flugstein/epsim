@@ -25,7 +25,10 @@ def extract_houses(root, node_list, outpath):
                                 if sqm > 50 and sqm < 400:  # filter out very small and large unspecified buildings
                                     write_line(f, 'house', building_tag, x, y, sqm)
                             else:
-                                levels = int(float(tags['building:levels'])) if 'building:levels' in tags else 1
+                                if 'building:levels' in tags and tags['building:levels'].isnumeric():
+                                    levels = int(tags['building:levels'])
+                                else:
+                                    levels = 1
                                 write_line(f, 'house', building_tag, x, y, sqm * levels)
 
 
@@ -68,9 +71,10 @@ def extract_leisure(root, node_list, outpath):
     # https://wiki.openstreetmap.org/wiki/Key:leisure
     restaurant_tags = ['biergarten', 'cafe', 'fast_food', 'food_court', 'ice_cream', 'restaurant']
     nightlife_tags = ['bar', 'pub', 'nightclub', 'stripclub', 'swingerclub', 'brothel']
-    entertainment_tags = ['arts_centre', 'casino', 'cinema', 'community_centre', 'conference_centre', 'events_venue', 'gambling', 'social_centre', 'theatre']
-    leisure_tags = ['adult_gaming_centre', 'amusement_arcade', 'bowling_alley', 'dance', 'escape_game', 'fitness_centre', 'hackerspace', 'sauna', 
-                    'sports_centre', 'sports_hall']
+    entertainment_tags = ['arts_centre', 'casino', 'cinema', 'community_centre', 'conference_centre', 'events_venue', 'gambling',
+                          'social_centre', 'theatre']
+    leisure_tags = ['adult_gaming_centre', 'amusement_arcade', 'bowling_alley', 'dance', 'escape_game', 'fitness_centre', 'hackerspace',
+                    'sauna', 'sports_centre', 'sports_hall']
     with open(outpath, 'a') as f:
         for c1 in root:
             tags = get_tags(c1)

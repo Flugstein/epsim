@@ -12,21 +12,21 @@ def chunks(lst, n):
 
 
 class EpsimGraph:
-    def __init__(self, k, sigma_office, perc_split_classes, print_progress=False):
+    def __init__(self, n, sigma_office, perc_split_classes, print_progress=False):
         """
         Generate a graph for epidemic simulation with the given parameters.
         
-        k -- determines the number of nodes in the graph (will be approx. 2*k)
+        n -- number of nodes in the graph (approx. due to rounding errors)
         sigma_office -- determines the distribution of parents to the offices
         perc_split_classes -- percentage of school classes that are split in half and alternate a shared classroom every day
         """
-        self.k = k
+        self.k = int(n / 2.386296)  # 2.386296 is an empirical value
         self.perc_split_classes = perc_split_classes
-        self.nodes = {i: True for i in range(2*k)}
+        self.nodes = {i: True for i in range(2*self.k)}
         self.sigma_office = sigma_office
-        self.id_bump = 2*k
-        self.child_nodes = set(range(k))
-        self.parent_nodes = set(range(k, 2*k))
+        self.id_bump = 2*self.k
+        self.child_nodes = set(range(self.k))
+        self.parent_nodes = set(range(self.k, 2*self.k))
         self.family_nbrs = {}
         self.school_nbrs_standard = {}
         self.school_nbrs_split = [] # list of 2 dicts
@@ -122,8 +122,8 @@ class EpsimGraph:
 
 
     def create_graph(self):
-        print(f"creating graph with k={self.k}, sigma_office={self.sigma_office}")
         if self.print_progress:
+            print(f"creating graph with k={self.k}, sigma_office={self.sigma_office}")
             print("randomly cluster children and parent nodes, such that there are child-parent pairs")
         children2parents = list(self.parent_nodes)
         random.shuffle(children2parents)

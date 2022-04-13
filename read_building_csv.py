@@ -110,23 +110,19 @@ def read_building_csv(e, csvpath):
     house_families = []
     family_i = 0
     for house_i, house_loc in enumerate(house_locs):
-        families = []
-        sqm = house_loc.sqm
         if family_i > len(e.families) - 1:
             print(f"{len(house_locs) - house_i} houses remain empty")
             break
-        while sqm > 0 and family_i < len(e.families):
-            # family_houses[family_i] = house_i
-            families.append(family_i)
-            sqm -= 100  # 100 sqm per family for multifamily houses [1]
-            family_i += 1
-        house_families.append(families)
+        num_families = int(house_loc.sqm / 100)  # 100 sqm per family for multifamily houses [1]
+        if family_i + num_families > len(e.families):
+            num_families = len(e.families) - family_i
+        house_families.append([i for i in range(family_i, family_i + num_families)])
+        family_i += num_families
     
     if family_i < len(e.families) - 1:
         print(f"{len(e.families) - 1 - family_i} families did not get a house, they are randomly distributed to occupied houses")
         while family_i < len(e.families) - 1:
             random.choice(house_families).append(family_i)
-            #family_houses[family_i] = random.randint(0, len(house_locs) - 1)
             family_i += 1
     
     e.house_families = house_families
