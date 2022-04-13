@@ -14,20 +14,26 @@ def chunks(lst, n):
 class EpsimGraph:
     def __init__(self, n, sigma_office, perc_split_classes, print_progress=False):
         """
-        Generate a graph for epidemic simulation with the given parameters.
+        Generate a graph for epidemic simulation with the given parameters such that approx.:
+        Children        23%
+        Parents         32%
+        Adult Single    17%
+        Adults in Pairs 28%
         
         n -- number of nodes in the graph (approx. due to rounding errors)
-        sigma_office -- determines the distribution of parents to the offices
+        sigma_office -- determines the distribution of adults to the offices
         perc_split_classes -- percentage of school classes that are split in half and alternate a shared classroom every day
         """
-        self.k = int(n / 2.386296)  # 2.386296 is an empirical value
+        self.n = n
+        n_parents_children = int(self.n * 0.55)
+        self.k = int(n_parents_children / 2.386296)  # 2.386296 is an empirical value
         self.perc_split_classes = perc_split_classes
         self.nodes = {i: True for i in range(2*self.k)}
         self.sigma_office = sigma_office
         self.id_bump = 2*self.k
         self.child_nodes = set(range(self.k))
-        self.parent_nodes = set(range(self.k, 2*self.k))
-        self.family_nbrs = {}
+        self.adult_nodes = set(range(self.k, 2*self.k))
+        self.household_nbrs = {}
         self.school_nbrs_standard = {}
         self.school_nbrs_split = [] # list of 2 dicts
         self.office_nbrs = {}
@@ -38,21 +44,21 @@ class EpsimGraph:
 
     def merge_parents(self, kept_node, merge_nodes):
         for merge_node in merge_nodes:
-            for node in self.family_nbrs[merge_node]:
-                self.family_nbrs[node].add(kept_node)
-                self.family_nbrs[node].update(self.family_nbrs[kept_node])
+            for node in self.household_nbrs[merge_node]:
+                self.household_nbrs[node].add(kept_node)
+                self.household_nbrs[node].update(self.household_nbrs[kept_node])
 
-            for node in self.family_nbrs[merge_node]:
-                self.family_nbrs[node].discard(merge_node)
+            for node in self.household_nbrs[merge_node]:
+                self.household_nbrs[node].discard(merge_node)
 
-            for node in self.family_nbrs[kept_node]:
-                self.family_nbrs[node].update(self.family_nbrs[merge_node])
-            self.family_nbrs[kept_node].update(self.family_nbrs[merge_node])
+            for node in self.household_nbrs[kept_node]:
+                self.household_nbrs[node].update(self.household_nbrs[merge_node])
+            self.household_nbrs[kept_node].update(self.household_nbrs[merge_node])
 
-            self.family_nbrs.pop(merge_node)
+            self.household_nbrs.pop(merge_node)
 
             self.nodes.pop(merge_node)
-            self.parent_nodes.discard(merge_node)
+            self.adult_nodes.discard(merge_node)
     
 
     def duplicate_parents(self, original_node):
@@ -60,15 +66,15 @@ class EpsimGraph:
         self.id_bump += 1
 
         self.nodes[new_node] = True
-        self.parent_nodes.add(new_node)
+        self.adult_nodes.add(new_node)
 
-        self.family_nbrs[new_node] = set()
-        self.family_nbrs[new_node].update(self.family_nbrs[original_node])
-        self.family_nbrs[new_node].add(original_node)
+        self.household_nbrs[new_node] = set()
+        self.household_nbrs[new_node].update(self.household_nbrs[original_node])
+        self.household_nbrs[new_node].add(original_node)
 
-        for node in self.family_nbrs[original_node]:
-            self.family_nbrs[node].add(new_node)
-        self.family_nbrs[original_node].add(new_node)
+        for node in self.household_nbrs[original_node]:
+            self.household_nbrs[node].add(new_node)
+        self.household_nbrs[original_node].add(new_node)
     
 
     def conv2new(self, nbrs_dict, old2new):
@@ -93,15 +99,15 @@ class EpsimGraph:
                     f.write(f"{nbrs[-1]}\n")
 
 
-    def write(self, family_nbrs_path, school_nbrs_path, office_nbrs_path):
+    def write(self, household_nbrs_path, school_nbrs_path, office_nbrs_path):
         # continous node ids starting from 0
         old2new = {}
         for i, node in enumerate(list(self.nodes.keys())):
             old2new[node] = i
 
-        new_family_nbrs = self.conv2new(self.family_nbrs, old2new)
-        self.write_nbrs(new_family_nbrs, family_nbrs_path)
-        print(f"{family_nbrs_path} written")
+        new_household_nbrs = self.conv2new(self.household_nbrs, old2new)
+        self.write_nbrs(new_household_nbrs, household_nbrs_path)
+        print(f"{household_nbrs_path} written")
 
         if len(self.school_nbrs_standard) > 0:
             nbrs = self.conv2new(self.school_nbrs_standard, old2new)
@@ -125,22 +131,22 @@ class EpsimGraph:
         if self.print_progress:
             print(f"creating graph with k={self.k}, sigma_office={self.sigma_office}")
             print("randomly cluster children and parent nodes, such that there are child-parent pairs")
-        children2parents = list(self.parent_nodes)
+        children2parents = list(self.adult_nodes)
         random.shuffle(children2parents)
         for child_node, parent_node in enumerate(children2parents):
-            self.family_nbrs[child_node] = {parent_node}
-            self.family_nbrs[parent_node] = {child_node}
+            self.household_nbrs[child_node] = {parent_node}
+            self.household_nbrs[parent_node] = {child_node}
 
         # parents: 1/2 no change, 1/4 merge 2 nodes, 1/8 merge 3 nodes, ...
         if self.print_progress:
             print("parents: 1/2 no change, 1/4 merge 2, 1/8 merge 3, ...")
-        parents_shuffle = list(self.parent_nodes)
+        parents_shuffle = list(self.adult_nodes)
         random.shuffle(parents_shuffle)
         parents_splits = []
         divisor = 2
         len_sum = 0
-        while len_sum < len(self.parent_nodes):
-            parents_split = parents_shuffle[len_sum : len_sum + int(math.ceil(len(self.parent_nodes) / divisor))]
+        while len_sum < len(self.adult_nodes):
+            parents_split = parents_shuffle[len_sum : len_sum + int(math.ceil(len(self.adult_nodes) / divisor))]
             parents_splits.append(parents_split)
             len_sum += len(parents_split)
             divisor *= 2
@@ -155,9 +161,26 @@ class EpsimGraph:
         # parents: duplicate every node
         if self.print_progress:
             print("parents: duplicate")
-        parent_nodes = self.parent_nodes.copy()
+        parent_nodes = self.adult_nodes.copy()
         for parent_node in parent_nodes:
             self.duplicate_parents(parent_node)
+
+        # adults: add adult singles
+        num_singles = int(self.n * 0.17)
+        for new_node in range(self.id_bump, self.id_bump + num_singles):
+            self.adult_nodes.add(new_node)
+            self.household_nbrs[new_node] = set()
+        self.id_bump += num_singles
+
+        # adults: add adults in pairs
+        num_pairs = int(self.n * 0.28 / 2)
+        for new_node in range(self.id_bump, self.id_bump + num_pairs):
+            new_pair_node = new_node + num_pairs
+            self.adult_nodes.add(new_node)
+            self.household_nbrs[new_node] = {new_pair_node}
+            self.adult_nodes.add(new_pair_node)
+            self.household_nbrs[new_pair_node] = {new_node}
+        self.id_bump += num_pairs * 2
 
         # children: k/l^2 many l*l grids, randomly place l^2 nodes on grid, cluster 8-neighborhood
         # perc_split_classes of grids (school classes) are divided into 2, with a sparser grid
@@ -219,35 +242,35 @@ class EpsimGraph:
             print(f"{len(self.school_nbrs_split[0]) + len(self.school_nbrs_split[1])} children in split classes, " \
                 + f"{len(self.school_nbrs_standard)} children in standard classes ({len(children_shuffle)} total, break: {brkpnt})")
 
-        # parents: cluster 1-sigma_office no change, sigma_office*1/2 cluster 2 nodes, sigma_office*1/4 cluster 3 nodes, 
+        # adults: cluster 1-sigma_office no change, sigma_office*1/2 cluster 2 nodes, sigma_office*1/4 cluster 3 nodes, 
         # sigma_office*1/8 cluster 4 nodes, sigma_office*1/8 cluster 5 nodes
         if self.print_progress:
-            print(f"parents: cluster 1-{self.sigma_office} no change, {self.sigma_office}*1/2 cluster 2, {self.sigma_office}*1/4 cluster 3, ...")
-        parents_shuffle = list(self.parent_nodes)
-        random.shuffle(parents_shuffle)
-        parents_splits = []
+            print(f"adults: cluster 1-{self.sigma_office} no change, {self.sigma_office}*1/2 cluster 2, {self.sigma_office}*1/4 cluster 3, ...")
+        adults_shuffle = list(self.adult_nodes)
+        random.shuffle(adults_shuffle)
+        adults_splits = []
         divisor = 2
         cap = 16
         len_sum = 0
-        parents_split = parents_shuffle[len_sum : len_sum + int(math.ceil(len(self.parent_nodes) * (1 - self.sigma_office)))]
-        parents_splits.append(parents_split)
-        len_sum += len(parents_split)
-        while len_sum < len(self.parent_nodes):
-            parents_split = parents_shuffle[len_sum : len_sum + int(math.ceil(len(self.parent_nodes) * self.sigma_office / divisor))]
-            parents_splits.append(parents_split)
-            len_sum += len(parents_split)
+        adults_split = adults_shuffle[len_sum : len_sum + int(math.ceil(len(self.adult_nodes) * (1 - self.sigma_office)))]
+        adults_splits.append(adults_split)
+        len_sum += len(adults_split)
+        while len_sum < len(self.adult_nodes):
+            adults_split = adults_shuffle[len_sum : len_sum + int(math.ceil(len(self.adult_nodes) * self.sigma_office / divisor))]
+            adults_splits.append(adults_split)
+            len_sum += len(adults_split)
             divisor *= 2
             if divisor > cap:
-                parents_split = parents_shuffle[len_sum:]
-                parents_splits.append(parents_split)
+                adults_split = adults_shuffle[len_sum:]
+                adults_splits.append(adults_split)
                 break
 
-        for node in parents_splits[0]: # 1-sigma_office split
+        for node in adults_splits[0]: # 1-sigma_office split
             self.office_nbrs[node] = {}
 
         cluster_size = 2
-        for parents_split in parents_splits[1:]:  # skip 1-sigma_office split
-            cluster_splits = list(chunks(parents_split, cluster_size))
+        for adults_split in adults_splits[1:]:  # skip 1-sigma_office split
+            cluster_splits = list(chunks(adults_split, cluster_size))
             for cluster_split in cluster_splits:
                 for node in cluster_split:
                     nbrs = set(cluster_split)

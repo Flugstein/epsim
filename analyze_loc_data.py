@@ -15,3 +15,4 @@ for building_type in df.building_type.unique():
 print(f"sqm of all buildings: {df['sqm'].sum()}")
 print(f"house sqm: {df[df['building_type'] == 'house']['sqm'].sum()}")
 print(f"bbox: {df['longitude'].min()},{df['latitude'].min()},{df['longitude'].max()},{df['latitude'].min()}")
+print(f"max sqm building: {df[df['building_type'] == 'house']['sqm'].max()}")

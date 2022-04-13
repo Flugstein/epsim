@@ -1,4 +1,4 @@
-# Agent based epidemic simulation modeling families, schools, offices and leisure/shopping activities.
+# Agent based epidemic simulation modeling households, schools, offices and leisure/shopping activities.
 # Agent states: suceptible, exposed, infectious, recovered.
 
 import sys
@@ -74,19 +74,19 @@ class Location:
 
 
 class Epsim:
-    def __init__(self, family_nbrs, school_nbrs_standard, school_nbrs_split, office_nbrs):
+    def __init__(self, household_nbrs, school_nbrs_standard, school_nbrs_split, office_nbrs):
         self.agents_in_state = []
-        self.family_nbrs = family_nbrs
+        self.household_nbrs = household_nbrs
         self.school_nbrs_standard = school_nbrs_standard
         self.school_nbrs_split = school_nbrs_split
         self.office_nbrs = office_nbrs
-        self.families = self.determine_clusters(self.family_nbrs)
-        print(f"family_nbrs: {len(self.family_nbrs)}, school_nbrs_standard: {len(self.school_nbrs_standard)}, " \
+        self.households = self.determine_clusters(self.household_nbrs)
+        print(f"household_nbrs: {len(self.household_nbrs)}, school_nbrs_standard: {len(self.school_nbrs_standard)}, " \
               + f"school_nbrs_split: {len(self.school_nbrs_split[0])} {len(self.school_nbrs_split[1])}, "\
-              + f"office_nbrs: {len(self.office_nbrs)}, families: {len(self.families)}")
+              + f"office_nbrs: {len(self.office_nbrs)}, households: {len(self.households)}")
         self.locations = {'supermarket': [], 'shop': [], 'restaurant': [], 'leisure': [], 'nightlife': []}  # locations of location type
-        self.house_families = []  # families of houses
-        #self.nearest_locs = [{} for family in self.families]  # visit locations of location type of house
+        self.house_households = []  # households of houses
+        #self.nearest_locs = [{} for household in self.households]  # visit locations of location type of house
         self.house_visit_locs = []  # visit locations of location type of house
 
 
@@ -113,17 +113,17 @@ class Epsim:
     def quarantine_agent(self, agent):
         self.quarantined[agent] = 0
         self.infectious_agents.discard(agent)
-        self.infectious_parent_agents.discard(agent)
+        self.infectious_adult_agents.discard(agent)
         self.infectious_child_agents.discard(agent)
         self.infectious_child_agents_standard.discard(agent)
 
 
-    def quarantine_agents_with_family(self, agents):
+    def quarantine_agents_with_household(self, agents):
         quarantined_agents = set()
         for agent in agents:
             self.quarantine_agent(agent)
             quarantined_agents.add(agent)
-            for nbr in self.family_nbrs[agent]:
+            for nbr in self.household_nbrs[agent]:
                 self.quarantine_agent(nbr)
                 quarantined_agents.add(nbr)
         return quarantined_agents
@@ -139,7 +139,7 @@ class Epsim:
         return clusters
 
     
-    def is_parent_agent(self, agent):
+    def is_adult_agent(self, agent):
         return agent in self.office_nbrs
 
 
@@ -147,58 +147,58 @@ class Epsim:
         return agent in self.school_nbrs_standard or agent in self.school_nbrs_split[0] or agent in self.school_nbrs_split[1]
 
 
-    def run_sim(self, sim_iters, num_start_agents, perc_immune_agents, start_weekday, p_spread_family_dict, p_spread_school_dict,
-                p_spread_office_dict, p_detect_child_dict, p_detect_parent_dict, testing_dict, omicron, split_stay_home,
+    def run_sim(self, sim_iters, num_start_agents, perc_immune_agents, start_weekday, p_spread_household_dict, p_spread_school_dict,
+                p_spread_office_dict, p_detect_child_dict, p_detect_adult_dict, testing_dict, omicron, split_stay_home,
                 loc_infec_rate, avg_visit_times, need_minutes, contact_mult, print_progress=False):
         """
         Run the epidemic simulation with the given parameters.
 
-        sim_iters            -- number of iterations/rounds to simulate
-        num_start_agents     -- number of initially infecteded agents
-                                single value: agents get disributed equally over all states
-                                list: exact number of agents per state
-        perc_immune_agents   -- percentage of initially immune agents
-                                single value: agents are randomly chosen
-                                dict: percentage of agents per agent class (families, parents, children)
-        start_weekday        -- simulation start weekday (0: Monday, 1: Tuesday, ..., 6: Sunday)
-        p_spread_family_dict -- probability to spread the infection within the family
-        p_spread_school_dict -- probability to spread the infection within the school
-        p_spread_office_dict -- probability to spread the infection within the office
-        p_detect_child_dict  -- probability that an infected child gets detected and quarantined because of its symtoms
-        p_detect_parent_dict -- probability that an infected parent gets detected and quarantined because of its symtoms
-        testing_dict         -- dict of type of test with probability that a test detects an infected person and weekday it is taken
-                                example: testing={'pcr': {'p': 0.95, 'weekdays': [2]}, 'antigen': {'p': 0.5, 'weekdays': [0, 4]}}
-        omicron              -- enable omicron variant (lower incubation time)
-        split_stay_home      -- True: the two halfs of split classes don't alternate, but one half always stays home
-        loc_infec_rate       -- infection rate for locations
-        avg_visit_times      -- avg time an agent spends time at a location per visit
-        need_minutes         -- personal needs in minutes per week
-        contact_mult         -- infection rate multiplier per location
-        print_progress       -- print simulation statistics every round onto the console
+        sim_iters               -- number of iterations/rounds to simulate
+        num_start_agents        -- number of initially infecteded agents
+                                   single value: agents get disributed equally over all states
+                                   list: exact number of agents per state
+        perc_immune_agents      -- percentage of initially immune agents
+                                   single value: agents are randomly chosen
+                                   dict: percentage of agents per agent class (households, adults, children)
+        start_weekday           -- simulation start weekday (0: Monday, 1: Tuesday, ..., 6: Sunday)
+        p_spread_household_dict -- probability to spread the infection within the household
+        p_spread_school_dict    -- probability to spread the infection within the school
+        p_spread_office_dict    -- probability to spread the infection within the office
+        p_detect_child_dict     -- probability that an infected child gets detected and quarantined because of its symtoms
+        p_detect_adult_dict     -- probability that an infected adult gets detected and quarantined because of its symtoms
+        testing_dict            -- dict of type of test with probability that a test detects an infected person and weekday it is taken
+                                   example: testing={'pcr': {'p': 0.95, 'weekdays': [2]}, 'antigen': {'p': 0.5, 'weekdays': [0, 4]}}
+        omicron                 -- enable omicron variant (lower incubation time)
+        split_stay_home         -- True: the two halfs of split classes don't alternate, but one half always stays home
+        loc_infec_rate          -- infection rate for locations
+        avg_visit_times         -- avg time an agent spends time at a location per visit
+        need_minutes            -- personal needs in minutes per week
+        contact_mult            -- infection rate multiplier per location
+        print_progress          -- print simulation statistics every round onto the console
         """
 
         # input conversion
         if isinstance(perc_immune_agents, tuple): perc_immune_agents = tuple2dict(perc_immune_agents, 1)
-        if isinstance(p_spread_family_dict, tuple): p_spread_family_dict = tuple2dict(p_spread_family_dict, 1)
+        if isinstance(p_spread_household_dict, tuple): p_spread_household_dict = tuple2dict(p_spread_household_dict, 1)
         if isinstance(p_spread_school_dict, tuple): p_spread_school_dict = tuple2dict(p_spread_school_dict, 1)
         if isinstance(p_spread_office_dict, tuple): p_spread_office_dict = tuple2dict(p_spread_office_dict, 1)
         if isinstance(p_detect_child_dict, tuple): p_detect_child_dict = tuple2dict(p_detect_child_dict, 1)
-        if isinstance(p_detect_parent_dict, tuple): p_detect_parent_dict = tuple2dict(p_detect_parent_dict, 1)
+        if isinstance(p_detect_adult_dict, tuple): p_detect_adult_dict = tuple2dict(p_detect_adult_dict, 1)
         if isinstance(testing_dict, tuple): testing_dict = tuple2dict(testing_dict, 3)
         if isinstance(loc_infec_rate, tuple): loc_infec_rate = tuple2dict(loc_infec_rate, 1)
         if isinstance(avg_visit_times, tuple): avg_visit_times = tuple2dict(avg_visit_times, 1)
         if isinstance(need_minutes, tuple): need_minutes = tuple2dict(need_minutes, 1)
         if isinstance(contact_mult, tuple): contact_mult = tuple2dict(contact_mult, 1)
 
-        if 0 not in p_spread_family_dict: raise ValueError("p_spread_family_dict must cointain value for round 0")
+        if 0 not in p_spread_household_dict: raise ValueError("p_spread_household_dict must cointain value for round 0")
         if 0 not in p_spread_school_dict: raise ValueError("p_spread_school_dict must cointain value for round 0")
         if 0 not in p_spread_office_dict: raise ValueError("p_spread_office_dict must cointain value for round 0")
         if 0 not in p_detect_child_dict: raise ValueError("p_detect_child_dict must cointain value for round 0")
-        if 0 not in p_detect_parent_dict: raise ValueError("p_detect_parent_dict must cointain value for round 0")
+        if 0 not in p_detect_adult_dict: raise ValueError("p_detect_adult_dict must cointain value for round 0")
         if 0 not in testing_dict: raise ValueError("testing_dict must cointain value for round 0")
 
         self.agents_in_state = []
-        self.agents_in_state.append({agent for agent in self.family_nbrs.keys()})
+        self.agents_in_state.append({agent for agent in self.household_nbrs.keys()})
         n = len(self.agents_in_state[0])
 
         # agent states
@@ -221,19 +221,19 @@ class Epsim:
 
         # set immune agents
         children = list(self.school_nbrs_standard.keys()) + list(self.school_nbrs_split[0].keys()) + list(self.school_nbrs_split[1].keys())
-        parents = list(self.office_nbrs.keys())
+        adults = list(self.office_nbrs.keys())
         if isinstance(perc_immune_agents, float):
             for agent in random.sample(self.agents_in_state[0], int(perc_immune_agents * n)):
                 self.agents_in_state[0].remove(agent)
         elif isinstance(perc_immune_agents, dict):
-            if 'families' in perc_immune_agents:
-                immune_families = random.sample(self.families, int(perc_immune_agents['families'] * len(self.families)))
-                for cluster in immune_families:
+            if 'households' in perc_immune_agents:
+                immune_households = random.sample(self.households, int(perc_immune_agents['households'] * len(self.households)))
+                for cluster in immune_households:
                     for agent in cluster:
                         self.agents_in_state[0].remove(agent)
-            if 'parents' in perc_immune_agents:
-                immune_parents = random.sample(parents, int(perc_immune_agents['parents'] * len(parents)))
-                for agent in immune_parents:
+            if 'adults' in perc_immune_agents:
+                immune_adults = random.sample(adults, int(perc_immune_agents['adults'] * len(adults)))
+                for agent in immune_adults:
                     self.agents_in_state[0].remove(agent)
             if 'children' in perc_immune_agents:
                 immune_children = random.sample(children, int(perc_immune_agents['children'] * len(children)))
@@ -256,15 +256,15 @@ class Epsim:
 
         # print simulation info
         print(f"starting simulation with n={n}, num_start_agents={num_start_agents}, perc_immune_agents={perc_immune_agents}, " \
-              + f"start_weekday={start_weekday}, sim_iters={sim_iters}, " + f"p_spread_family_dict={p_spread_family_dict}, " \
+              + f"start_weekday={start_weekday}, sim_iters={sim_iters}, " + f"p_spread_household_dict={p_spread_household_dict}, " \
               + f"p_spread_school_dict={p_spread_school_dict}, p_spread_office={p_spread_office_dict}, " \
-              + f"p_detect_child_dict={p_detect_child_dict}, p_detect_parent_dict={p_detect_parent_dict}, testing_dict={testing_dict}")
+              + f"p_detect_child_dict={p_detect_child_dict}, p_detect_adult_dict={p_detect_adult_dict}, testing_dict={testing_dict}")
         print(f"start immune: {num_start_immune}")
 
         if print_progress:
             print("the following information represents the number of agents per round for:")
-            print("[(states), infected, infected_in_family, infected_in_school, infected_in_office, infected_by_children, " \
-                  "infected_by_parents, quarantined_by_detection, quarantined_by_test, infected_in_location]")
+            print("[(states), infected, infected_in_household, infected_in_school, infected_in_office, infected_by_children, " \
+                  "infected_by_adults, quarantined_by_detection, quarantined_by_test, infected_in_location]")
 
         # initialize simulation variables
         num_state_infected_and_immune_per_rnd = []
@@ -275,11 +275,11 @@ class Epsim:
         for rnd in range(sim_iters):
             weekday = (rnd + start_weekday) % 7
 
-            if rnd in p_spread_family_dict: p_spread_family = p_spread_family_dict[rnd]
+            if rnd in p_spread_household_dict: p_spread_household = p_spread_household_dict[rnd]
             if rnd in p_spread_office_dict: p_spread_office = p_spread_office_dict[rnd]
             if rnd in p_spread_school_dict: p_spread_school = p_spread_school_dict[rnd]
             if rnd in p_detect_child_dict: p_detect_child = p_detect_child_dict[rnd]
-            if rnd in p_detect_parent_dict: p_detect_parent = p_detect_parent_dict[rnd]
+            if rnd in p_detect_adult_dict: p_detect_adult = p_detect_adult_dict[rnd]
             if rnd in testing_dict: testing = testing_dict[rnd]
 
             # info tracking: number of agents per state at beginning of the day
@@ -294,13 +294,13 @@ class Epsim:
                 info = {
                     'states': tuple(num_agents_per_state[s] for s in range(self.num_agent_states)),
                     'infected': 0,
-                    'infected_in_family': 0,
+                    'infected_in_household': 0,
                     'infected_in_school': 0,
                     'infected_in_office': 0,
                     'infected_by_children': 0,
                     'infected_children': 0,
-                    'infected_by_parents': 0,
-                    'infected_parents': 0,
+                    'infected_by_adults': 0,
+                    'infected_adults': 0,
                     'quarantined_by_detection': 0,
                     'quarantined_by_test': 0,
                     'infected_in_supermarket': 0,
@@ -317,7 +317,7 @@ class Epsim:
             self.infectious_agents = set()
             for s in self.states_infectious:
                 self.infectious_agents |= self.agents_in_state[s]
-            self.infectious_parent_agents = self.infectious_agents & self.office_nbrs.keys()
+            self.infectious_adult_agents = self.infectious_agents & self.office_nbrs.keys()
             self.infectious_child_agents = self.infectious_agents & (self.school_nbrs_standard.keys() | self.school_nbrs_split[0].keys() \
                                                                      | self.school_nbrs_split[1].keys())
             self.infectious_child_agents_standard = self.infectious_child_agents & self.school_nbrs_standard.keys()
@@ -326,23 +326,23 @@ class Epsim:
             self.quarantined = {agent: counter for (agent, counter) in self.quarantined.items() if counter < 10}
 
             # split between quarantined and non-quarantined infectious agents
-            self.quarantined_infectious_parent_agents = self.quarantined.keys() & self.infectious_parent_agents
+            self.quarantined_infectious_adult_agents = self.quarantined.keys() & self.infectious_adult_agents
             self.quarantined_infectious_child_agents = self.quarantined.keys() & self.infectious_child_agents
-            self.infectious_parent_agents = self.infectious_parent_agents - self.quarantined.keys()
+            self.infectious_adult_agents = self.infectious_adult_agents - self.quarantined.keys()
             self.infectious_child_agents = self.infectious_child_agents - self.quarantined.keys()
             self.infectious_child_agents_standard = self.infectious_child_agents_standard - self.quarantined.keys()
 
             # spreading, testing and detection
-            # spread in family (quarantined agents only spread in family)
-            infected_in_family_by_children = self.spread(self.family_nbrs, self.quarantined_infectious_child_agents, p_spread_family)
-            infected_in_family_by_parents = self.spread(self.family_nbrs, self.quarantined_infectious_parent_agents, p_spread_family)
+            # spread in household (quarantined agents only spread in household)
+            infected_in_household_by_children = self.spread(self.household_nbrs, self.quarantined_infectious_child_agents, p_spread_household)
+            infected_in_household_by_adults = self.spread(self.household_nbrs, self.quarantined_infectious_adult_agents, p_spread_household)
 
-            infected_in_family_by_children |= self.spread(self.family_nbrs, self.infectious_child_agents, p_spread_family)
-            infected_in_family_by_parents |= self.spread(self.family_nbrs, self.infectious_parent_agents, p_spread_family)
+            infected_in_household_by_children |= self.spread(self.household_nbrs, self.infectious_child_agents, p_spread_household)
+            infected_in_household_by_adults |= self.spread(self.household_nbrs, self.infectious_adult_agents, p_spread_household)
 
-            infected_in_family = infected_in_family_by_children | infected_in_family_by_parents
+            infected_in_household = infected_in_household_by_children | infected_in_household_by_adults
 
-            # test children on monday, wednesday and friday and if they test positive, them and their families get quarantined
+            # test children on monday, wednesday and friday and if they test positive, them and their households get quarantined
             quarantined_by_test = set()
             for testing_type, testing_params in testing.items():
                 if weekday in testing_params['weekdays']:
@@ -350,16 +350,16 @@ class Epsim:
                         pos_tested_children = self.test_agents(self.infectious_child_agents & self.agents_in_state[2], testing_params['p'])
                     else:
                         pos_tested_children = self.test_agents(self.infectious_child_agents, testing_params['p'])
-                    quarantined_by_test = self.quarantine_agents_with_family(pos_tested_children)
+                    quarantined_by_test = self.quarantine_agents_with_household(pos_tested_children)
 
             # spread in office only during weekdays
             infected_in_office = set()
             quarantined_by_detection_in_office = set()
             if weekday in [0, 1, 2, 3, 4]:
-                infected_in_office = self.spread(self.office_nbrs, self.infectious_parent_agents, p_spread_office)
-                # with p_detect_parent an infection of a parent gets detected (shows symtoms) and it and its family gets quarantined
-                detected_in_office = self.detect_agents(infected_in_office, p_detect_parent)
-                quarantined_by_detection_in_office = self.quarantine_agents_with_family(detected_in_office)
+                infected_in_office = self.spread(self.office_nbrs, self.infectious_adult_agents, p_spread_office)
+                # with p_detect_adult an infection of a adult gets detected (shows symtoms) and it and its household gets quarantined
+                detected_in_office = self.detect_agents(infected_in_office, p_detect_adult)
+                quarantined_by_detection_in_office = self.quarantine_agents_with_household(detected_in_office)
 
             # spread in school only during weekdays
             infeced_in_school_standard = set()
@@ -370,9 +370,9 @@ class Epsim:
                 # handle standard classes
                 if len(self.school_nbrs_standard) > 0:
                     infeced_in_school_standard = self.spread(self.school_nbrs_standard, self.infectious_child_agents, p_spread_school)
-                    # with p_detect_child an infection of a child gets detected (shows symtoms) and it and its family gets quarantined
+                    # with p_detect_child an infection of a child gets detected (shows symtoms) and it and its household gets quarantined
                     detected_in_school_standard = self.detect_agents(infeced_in_school_standard, p_detect_child)
-                    quarantined_by_detection_in_school_standard = self.quarantine_agents_with_family(detected_in_school_standard)
+                    quarantined_by_detection_in_school_standard = self.quarantine_agents_with_household(detected_in_school_standard)
 
                 # handle alternating split classes
                 if len(self.school_nbrs_split[0]) > 0:
@@ -383,16 +383,16 @@ class Epsim:
                     infected_in_school_split = self.spread(self.school_nbrs_split[current_half], self.infectious_child_agents, 
                                                            p_spread_school)
                     detected_in_school_split = self.detect_agents(infected_in_school_split, p_detect_child)
-                    quarantined_by_detection_in_school_split = self.quarantine_agents_with_family(detected_in_school_split)
+                    quarantined_by_detection_in_school_split = self.quarantine_agents_with_household(detected_in_school_split)
 
             infected_in_school = infeced_in_school_standard | infected_in_school_split
             quarantined_by_detection_in_school = quarantined_by_detection_in_school_standard | quarantined_by_detection_in_school_split
 
             # register visits
-            for h, families in enumerate(self.house_families):
+            for h, house in enumerate(self.house_households):
                 for loc_type, visit_locs in self.house_visit_locs[h].items():
-                    for f in families:
-                        for agent in self.families[f]:
+                    for hh in house:
+                        for agent in self.households[hh]:
                             visit_loc = random.choice(visit_locs)  # pick random location from favourite locations
                             visit_loc.register_visit(self, agent)
 
@@ -403,14 +403,14 @@ class Epsim:
                 for loc in locs:
                     infected_in_location[loc_type] |= loc.spread(self)
 
-            infected_by_children = infected_in_family_by_children | infected_in_school  # does not count infections in locations
-            infected_by_parents = infected_in_family_by_parents | infected_in_office  # does not count infections in locations
-            infected = infected_by_children | infected_by_parents
+            infected_by_children = infected_in_household_by_children | infected_in_school  # does not count infections in locations
+            infected_by_adults = infected_in_household_by_adults | infected_in_office  # does not count infections in locations
+            infected = infected_by_children | infected_by_adults
             for loc_type, infec_in_loc in infected_in_location.items():
                 infected |= infec_in_loc
             quarantined_by_detection = quarantined_by_detection_in_office | quarantined_by_detection_in_school
             infected_children = {agent for agent in infected if self.is_child_agent(agent)}
-            infected_parents = {agent for agent in infected if self.is_parent_agent(agent)}
+            infected_adults = {agent for agent in infected if self.is_adult_agent(agent)}
 
             # all infected agents increase their state every round, agents in final state get removed
             for s in reversed(range(2, len(self.agents_in_state))):
@@ -425,13 +425,13 @@ class Epsim:
             info = {
                 'states': tuple(num_agents_per_state[s] for s in range(self.num_agent_states)),
                 'infected': len(infected),
-                'infected_in_family': len(infected_in_family),
+                'infected_in_household': len(infected_in_household),
                 'infected_in_school': len(infected_in_school),
                 'infected_in_office': len(infected_in_office),
                 'infected_by_children': len(infected_by_children),
                 'infected_children': len(infected_children),
-                'infected_by_parents': len(infected_by_parents),
-                'infected_parents': len(infected_parents),
+                'infected_by_adults': len(infected_by_adults),
+                'infected_adults': len(infected_adults),
                 'quarantined_by_detection': len(quarantined_by_detection),
                 'quarantined_by_test': len(quarantined_by_test),
                 'infected_in_supermarket': len(infected_in_location['supermarket']),

@@ -104,28 +104,28 @@ def read_building_csv(e, csvpath):
     e.locations = {loc_type: [Location(loc_type, loc.tag, loc.x, loc.y, loc.sqm) for loc in locs]
                    for loc_type, locs in locations.items()}
 
-    # distribute families to houses
+    # distribute households to houses
     # [1] https://www.statistik.at/web_de/statistiken/menschen_und_gesellschaft/wohnen/wohnsituation/081235.html
     random.shuffle(house_locs)
-    house_families = []
-    family_i = 0
+    house_households = []
+    household_i = 0
     for house_i, house_loc in enumerate(house_locs):
-        if family_i > len(e.families) - 1:
+        if household_i > len(e.households) - 1:
             print(f"{len(house_locs) - house_i} houses remain empty")
             break
-        num_families = int(house_loc.sqm / 100)  # 100 sqm per family for multifamily houses [1]
-        if family_i + num_families > len(e.families):
-            num_families = len(e.families) - family_i
-        house_families.append([i for i in range(family_i, family_i + num_families)])
-        family_i += num_families
+        num_households = int(house_loc.sqm / 90) + 1  # ~90 sqm per household for multihousehold houses [1]
+        if household_i + num_households > len(e.households):
+            num_households = len(e.households) - household_i
+        house_households.append([i for i in range(household_i, household_i + num_households)])
+        household_i += num_households
     
-    if family_i < len(e.families) - 1:
-        print(f"{len(e.families) - 1 - family_i} families did not get a house, they are randomly distributed to occupied houses")
-        while family_i < len(e.families) - 1:
-            random.choice(house_families).append(family_i)
-            family_i += 1
+    if household_i < len(e.households) - 1:
+        print(f"{len(e.households) - 1 - household_i} households did not get a house, they are randomly distributed to occupied houses")
+        while household_i < len(e.households) - 1:
+            random.choice(house_households).append(household_i)
+            household_i += 1
     
-    e.house_families = house_families
+    e.house_households = house_households
 
     # get visit locations for every house
     e.house_visit_locs = [{loc_type: get_visit_locs[loc_type](house_loc, locs)
