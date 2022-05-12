@@ -30,7 +30,7 @@
 | Sqm per person     |       36.8 |       40.3 | (Wien, 2021) [Statistik Austria](https://www.statistik.at/web_de/statistiken/menschen_und_gesellschaft/wohnen/wohnsituation/081235.html) |
 | Avg household size |       2.04 |       2.13 | [Statistik Austria](https://www.statistik.at/web_de/statistiken/menschen_und_gesellschaft/bevoelkerung/haushalte_familien_lebensformen/haushalte/index.html) |
 | House sqm total    | 71 208 000 | 78 003 814 | from population and sqm per person |
-| Households         |    948 529 |    908 989 | from population and avg houshold size (926 000 according to official) |
+| Households         |    948 529 |    908 989 | from population and avg houshold size (926 000 according to [Statistik Austria](https://www.statistik.at/web_de/statistiken/menschen_und_gesellschaft/bevoelkerung/haushalte_familien_lebensformen/haushalte/index.html)) |
 | Sqm per household  |         75 |         86 | (Vienna, 2021) [Statistik Austria](https://www.statistik.at/web_de/statistiken/menschen_und_gesellschaft/wohnen/wohnsituation/081235.html) |
 
 ## Households

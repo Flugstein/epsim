@@ -37,6 +37,7 @@ class EpsimGraph:
         self.school_nbrs_standard = {}
         self.school_nbrs_split = [] # list of 2 dicts
         self.office_nbrs = {}
+        self.interhousehold_nbrs = {}
         self.print_progress = print_progress
 
         self.create_graph()
@@ -165,11 +166,19 @@ class EpsimGraph:
         for parent_node in parent_nodes:
             self.duplicate_parents(parent_node)
 
+        children_parent_nodes = list(self.household_nbrs.keys())
+
         # adults: add adult singles
         num_singles = int(self.n * 0.17)
         for new_node in range(self.id_bump, self.id_bump + num_singles):
             self.adult_nodes.add(new_node)
             self.household_nbrs[new_node] = set()
+            # interhousehold
+            rel_node = random.choice(children_parent_nodes)
+            relatives = self.household_nbrs[rel_node] | {rel_node}
+            self.interhousehold_nbrs[new_node] = relatives
+            for rel in relatives:
+                self.interhousehold_nbrs[rel] = {new_node}
         self.id_bump += num_singles
 
         # adults: add adults in pairs
@@ -180,6 +189,13 @@ class EpsimGraph:
             self.household_nbrs[new_node] = {new_pair_node}
             self.adult_nodes.add(new_pair_node)
             self.household_nbrs[new_pair_node] = {new_node}
+            # interhousehold
+            rel_node = random.choice(children_parent_nodes)
+            relatives = self.household_nbrs[rel_node] | {rel_node}
+            self.interhousehold_nbrs[new_node] = relatives
+            self.interhousehold_nbrs[new_pair_node] = relatives
+            for rel in relatives:
+                self.interhousehold_nbrs[rel] = {new_node, new_pair_node}
         self.id_bump += num_pairs * 2
 
         # children: k/l^2 many l*l grids, randomly place l^2 nodes on grid, cluster 8-neighborhood

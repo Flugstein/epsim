@@ -74,19 +74,19 @@ class Location:
 
 
 class Epsim:
-    def __init__(self, household_nbrs, school_nbrs_standard, school_nbrs_split, office_nbrs):
+    def __init__(self, household_nbrs, school_nbrs_standard, school_nbrs_split, office_nbrs, interhousehold_nbrs):
         self.agents_in_state = []
         self.household_nbrs = household_nbrs
         self.school_nbrs_standard = school_nbrs_standard
         self.school_nbrs_split = school_nbrs_split
         self.office_nbrs = office_nbrs
+        self.interhousehold_nbrs = interhousehold_nbrs
         self.households = self.determine_clusters(self.household_nbrs)
         print(f"household_nbrs: {len(self.household_nbrs)}, school_nbrs_standard: {len(self.school_nbrs_standard)}, " \
               + f"school_nbrs_split: {len(self.school_nbrs_split[0])} {len(self.school_nbrs_split[1])}, "\
               + f"office_nbrs: {len(self.office_nbrs)}, households: {len(self.households)}")
         self.locations = {'supermarket': [], 'shop': [], 'restaurant': [], 'leisure': [], 'nightlife': []}  # locations of location type
         self.house_households = []  # households of houses
-        #self.nearest_locs = [{} for household in self.households]  # visit locations of location type of house
         self.house_visit_locs = []  # visit locations of location type of house
 
 
@@ -116,6 +116,8 @@ class Epsim:
         self.infectious_adult_agents.discard(agent)
         self.infectious_child_agents.discard(agent)
         self.infectious_child_agents_standard.discard(agent)
+        self.infectious_interhousehold_child_agents.discard(agent)
+        self.infectious_interhousehold_adult_agents.discard(agent)
 
 
     def quarantine_agents_with_household(self, agents):
@@ -149,7 +151,7 @@ class Epsim:
 
     def run_sim(self, sim_iters, num_start_agents, perc_immune_agents, start_weekday, p_spread_household_dict, p_spread_school_dict,
                 p_spread_office_dict, p_detect_child_dict, p_detect_adult_dict, testing_dict, omicron, split_stay_home,
-                loc_infec_rate, avg_visit_times, need_minutes, contact_mult, print_progress=False):
+                loc_infec_rate, avg_visit_times, need_minutes, contact_mult, p_interhh_visit_dict, print_progress=False):
         """
         Run the epidemic simulation with the given parameters.
 
@@ -174,6 +176,7 @@ class Epsim:
         avg_visit_times         -- avg time an agent spends time at a location per visit
         need_minutes            -- personal needs in minutes per week
         contact_mult            -- infection rate multiplier per location
+        p_interhh_visit_dict    -- probability for a person to visit their interhousehold family
         print_progress          -- print simulation statistics every round onto the console
         """
 
@@ -189,12 +192,14 @@ class Epsim:
         if isinstance(avg_visit_times, tuple): avg_visit_times = tuple2dict(avg_visit_times, 1)
         if isinstance(need_minutes, tuple): need_minutes = tuple2dict(need_minutes, 1)
         if isinstance(contact_mult, tuple): contact_mult = tuple2dict(contact_mult, 1)
+        if isinstance(p_interhh_visit_dict, tuple): p_interhh_visit_dict = tuple2dict(p_interhh_visit_dict, 1)
 
         if 0 not in p_spread_household_dict: raise ValueError("p_spread_household_dict must cointain value for round 0")
         if 0 not in p_spread_school_dict: raise ValueError("p_spread_school_dict must cointain value for round 0")
         if 0 not in p_spread_office_dict: raise ValueError("p_spread_office_dict must cointain value for round 0")
         if 0 not in p_detect_child_dict: raise ValueError("p_detect_child_dict must cointain value for round 0")
         if 0 not in p_detect_adult_dict: raise ValueError("p_detect_adult_dict must cointain value for round 0")
+        if 0 not in p_interhh_visit_dict: raise ValueError("p_interhh_visit_dict must cointain value for round 0")
         if 0 not in testing_dict: raise ValueError("testing_dict must cointain value for round 0")
 
         self.agents_in_state = []
@@ -263,8 +268,8 @@ class Epsim:
 
         if print_progress:
             print("the following information represents the number of agents per round for:")
-            print("[(states), infected, infected_in_household, infected_in_school, infected_in_office, infected_by_children, " \
-                  "infected_by_adults, quarantined_by_detection, quarantined_by_test, infected_in_location]")
+            print("[(states), infected, infected_in_household, infected_in_school, infected_in_office, infected_in_interhousehold, " \
+                  "infected_by_children, infected_by_adults, quarantined_by_detection, quarantined_by_test, infected_in_location]")
 
         # initialize simulation variables
         num_state_infected_and_immune_per_rnd = []
@@ -281,6 +286,7 @@ class Epsim:
             if rnd in p_detect_child_dict: p_detect_child = p_detect_child_dict[rnd]
             if rnd in p_detect_adult_dict: p_detect_adult = p_detect_adult_dict[rnd]
             if rnd in testing_dict: testing = testing_dict[rnd]
+            if rnd in p_interhh_visit_dict: p_interhh_visit = p_interhh_visit_dict[rnd]
 
             # info tracking: number of agents per state at beginning of the day
             num_agents_per_state = [len(agents) for agents in self.agents_in_state]
@@ -297,6 +303,7 @@ class Epsim:
                     'infected_in_household': 0,
                     'infected_in_school': 0,
                     'infected_in_office': 0,
+                    'infected_in_interhousehold': 0,
                     'infected_by_children': 0,
                     'infected_children': 0,
                     'infected_by_adults': 0,
@@ -313,6 +320,8 @@ class Epsim:
                     info_per_rnd.append(info)
                 break
 
+            self.visiting_relatives = {node for node in self.interhousehold_nbrs.keys() if random.random() < p_interhh_visit}
+
             # compute infectious agents for this round
             self.infectious_agents = set()
             for s in self.states_infectious:
@@ -321,6 +330,8 @@ class Epsim:
             self.infectious_child_agents = self.infectious_agents & (self.school_nbrs_standard.keys() | self.school_nbrs_split[0].keys() \
                                                                      | self.school_nbrs_split[1].keys())
             self.infectious_child_agents_standard = self.infectious_child_agents & self.school_nbrs_standard.keys()
+            self.infectious_interhousehold_child_agents = self.infectious_child_agents & self.visiting_relatives
+            self.infectious_interhousehold_adult_agents = self.infectious_adult_agents & self.visiting_relatives
 
             # agents in quarantine for 10 rounds get released
             self.quarantined = {agent: counter for (agent, counter) in self.quarantined.items() if counter < 10}
@@ -331,6 +342,8 @@ class Epsim:
             self.infectious_adult_agents = self.infectious_adult_agents - self.quarantined.keys()
             self.infectious_child_agents = self.infectious_child_agents - self.quarantined.keys()
             self.infectious_child_agents_standard = self.infectious_child_agents_standard - self.quarantined.keys()
+            self.infectious_interhousehold_child_agents = self.infectious_interhousehold_child_agents - self.quarantined.keys()
+            self.infectious_interhousehold_adult_agents = self.infectious_interhousehold_adult_agents - self.quarantined.keys()
 
             # spreading, testing and detection
             # spread in household (quarantined agents only spread in household)
@@ -388,6 +401,11 @@ class Epsim:
             infected_in_school = infeced_in_school_standard | infected_in_school_split
             quarantined_by_detection_in_school = quarantined_by_detection_in_school_standard | quarantined_by_detection_in_school_split
 
+            # spread in interhouseholds (visits to relatives) only once every 30 days
+            infected_in_interhousehold_by_children = self.spread(self.interhousehold_nbrs, self.infectious_interhousehold_child_agents, p_spread_household)
+            infected_in_interhousehold_by_adults = self.spread(self.interhousehold_nbrs, self.infectious_interhousehold_adult_agents, p_spread_household)
+            infected_in_interhousehold = infected_in_interhousehold_by_children | infected_in_interhousehold_by_adults
+
             # register visits
             for h, house in enumerate(self.house_households):
                 for loc_type, visit_locs in self.house_visit_locs[h].items():
@@ -403,8 +421,8 @@ class Epsim:
                 for loc in locs:
                     infected_in_location[loc_type] |= loc.spread(self)
 
-            infected_by_children = infected_in_household_by_children | infected_in_school  # does not count infections in locations
-            infected_by_adults = infected_in_household_by_adults | infected_in_office  # does not count infections in locations
+            infected_by_children = infected_in_household_by_children | infected_in_interhousehold_by_children | infected_in_school  # does not count infections in locations
+            infected_by_adults = infected_in_household_by_adults | infected_in_interhousehold_by_adults | infected_in_office  # does not count infections in locations
             infected = infected_by_children | infected_by_adults
             for loc_type, infec_in_loc in infected_in_location.items():
                 infected |= infec_in_loc
@@ -428,6 +446,7 @@ class Epsim:
                 'infected_in_household': len(infected_in_household),
                 'infected_in_school': len(infected_in_school),
                 'infected_in_office': len(infected_in_office),
+                'infected_in_interhousehold': len(infected_in_interhousehold),
                 'infected_by_children': len(infected_by_children),
                 'infected_children': len(infected_children),
                 'infected_by_adults': len(infected_by_adults),
